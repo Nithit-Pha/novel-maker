@@ -1,0 +1,75 @@
+@import '@xyflow/react/dist/style.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+  background: #0f1929;
+  color: #eee;
+}
+
+/* React Flow theme overrides */
+.react-flow {
+  background: #0f1929;
+}
+.react-flow__background {
+  background-color: #0f1929;
+}
+.react-flow__controls {
+  background: #16213e !important;
+  border: 1px solid #2a3a5e !important;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.react-flow__controls button {
+  background: #16213e !important;
+  border-bottom: 1px solid #2a3a5e !important;
+  color: #eee !important;
+  fill: #eee !important;
+}
+.react-flow__controls button:hover {
+  background: #1a2845 !important;
+}
+.react-flow__minimap {
+  background: #16213e !important;
+  border: 1px solid #2a3a5e !important;
+  border-radius: 8px;
+}
+.react-flow__edge-path {
+  stroke: #6a8eff;
+  stroke-width: 2;
+}
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: #e94560;
+  stroke-width: 3;
+}
+.react-flow__handle {
+  width: 12px;
+  height: 12px;
+  background: #6a8eff;
+  border: 2px solid #16213e;
+}
+.react-flow__handle:hover {
+  background: #e94560;
+}
+.react-flow__attribution {
+  background: transparent !important;
+  color: #4a5a7a !important;
+}
+
+/* Play mode card transition */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out;
+}

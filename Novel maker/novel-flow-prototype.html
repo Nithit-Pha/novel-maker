@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Novel Flow - Prototype</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    overflow: hidden;
+    height: 100vh;
+  }
+  #toolbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 56px;
+    background: #16213e;
+    border-bottom: 1px solid #2a3a5e;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 10px;
+    z-index: 100;
+  }
+  #toolbar h1 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-right: 20px;
+    color: #e94560;
+  }
+  .btn {
+    background: #0f3460;
+    color: #eee;
+    border: 1px solid #2a4a7a;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s;
+  }
+  .btn:hover { background: #1a4a80; }
+  .btn.primary { background: #e94560; border-color: #e94560; }
+  .btn.primary:hover { background: #ff5571; }
+  .btn.ghost { background: transparent; }
+  .spacer { flex: 1; }
+
+  #canvas-wrap {
+    position: absolute;
+    top: 56px; left: 0; right: 0; bottom: 0;
+    overflow: hidden;
+    cursor: grab;
+  }
+  #canvas-wrap.panning { cursor: grabbing; }
+  #canvas {
+    position: absolute;
+    width: 5000px;
+    height: 5000px;
+    background-image:
+      radial-gradient(circle, #2a3a5e 1px, transparent 1px);
+    background-size: 24px 24px;
+    transform-origin: 0 0;
+  }
+
+  #connections {
+    position: absolute;
+    top: 0; left: 0;
+    width: 5000px;
+    height: 5000px;
+    pointer-events: none;
+  }
+  #connections path {
+    fill: none;
+    stroke: #6a8eff;
+    stroke-width: 2;
+    pointer-events: stroke;
+  }
+  #connections path.temp {
+    stroke: #e94560;
+    stroke-dasharray: 5 5;
+  }
+  #connections path.hover {
+    stroke: #e94560;
+    stroke-width: 3;
+    cursor: pointer;
+    pointer-events: stroke;
+  }
+
+  .node {
+    position: absolute;
+    min-width: 240px;
+    max-width: 280px;
+    background: #16213e;
+    border: 2px solid #2a4a7a;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    user-select: none;
+  }
+  .node.selected { border-color: #e94560; box-shadow: 0 4px 20px rgba(233,69,96,0.4); }
+  .node.dialog { border-color: #4a7aff; }
+  .node.dialog.selected { border-color: #e94560; }
+  .node.decision { border-color: #ffaa44; }
+  .node.decision.selected { border-color: #e94560; }
+  .node.start { border-color: #44dd88; }
+  .node.start.selected { border-color: #e94560; }
+
+  .node-header {
+    padding: 10px 12px;
+    border-bottom: 1px solid #2a3a5e;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: move;
+    background: rgba(0,0,0,0.2);
+    border-radius: 8px 8px 0 0;
+  }
+  .node-icon {
+    width: 20px; height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+  .node-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex: 1;
+  }
+  .node.dialog .node-title { color: #4a7aff; }
+  .node.decision .node-title { color: #ffaa44; }
+  .node.start .node-title { color: #44dd88; }
+  .node-delete {
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .node-delete:hover { background: #e94560; color: white; }
+
+  .node-body { padding: 12px; }
+  .field { margin-bottom: 10px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label {
+    display: block;
+    font-size: 11px;
+    color: #8a9bbf;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .field input, .field textarea {
+    width: 100%;
+    background: #0f1929;
+    border: 1px solid #2a3a5e;
+    color: #eee;
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    resize: vertical;
+  }
+  .field input:focus, .field textarea:focus {
+    outline: none;
+    border-color: #4a7aff;
+  }
+  .field textarea { min-height: 50px; }
+
+  .choices { display: flex; flex-direction: column; gap: 6px; }
+  .choice {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    position: relative;
+  }
+  .choice input { flex: 1; }
+  .choice-remove {
+    background: #2a3a5e;
+    color: #aaa;
+    border: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .choice-remove:hover { background: #e94560; color: white; }
+  .add-choice {
+    background: #0f3460;
+    color: #6a8eff;
+    border: 1px dashed #2a4a7a;
+    padding: 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  .add-choice:hover { background: #1a4a80; color: #eee; }
+
+  .port {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: #6a8eff;
+    border: 2px solid #16213e;
+    border-radius: 50%;
+    cursor: crosshair;
+    z-index: 2;
+  }
+  .port:hover { background: #e94560; transform: scale(1.3); }
+  .port.in {
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .port.in:hover { transform: translateY(-50%) scale(1.3); }
+  .port.out {
+    right: -8px;
+  }
+  .port.out.single {
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .port.out.single:hover { transform: translateY(-50%) scale(1.3); }
+  .port.out.choice {
+    /* positioned per choice */
+  }
+
+  #empty-hint {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: #4a5a7a;
+    text-align: center;
+    pointer-events: none;
+    font-size: 14px;
+  }
+  #empty-hint h2 { font-size: 22px; margin-bottom: 8px; color: #6a8eff; }
+
+  #zoom-info {
+    position: fixed;
+    bottom: 16px; right: 16px;
+    background: #16213e;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #8a9bbf;
+    border: 1px solid #2a3a5e;
+  }
+
+  #context-menu {
+    position: fixed;
+    background: #16213e;
+    border: 1px solid #2a4a7a;
+    border-radius: 6px;
+    padding: 4px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    display: none;
+    z-index: 200;
+    min-width: 160px;
+  }
+  #context-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    color: #eee;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  #context-menu button:hover { background: #0f3460; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>Novel Flow</h1>
+  <button class="btn" onclick="addNode('dialog')">+ Dialog</button>
+  <button class="btn" onclick="addNode('decision')">+ Decision</button>
+  <button class="btn" onclick="addNode('start')">+ Start</button>
+  <div class="spacer"></div>
+  <button class="btn ghost" onclick="zoomFit()">Fit</button>
+  <button class="btn ghost" onclick="exportJSON()">Export</button>
+  <button class="btn ghost" onclick="importJSON()">Import</button>
+  <button class="btn primary" onclick="saveProject()">Save</button>
+</div>
+
+<div id="canvas-wrap">
+  <div id="canvas">
+    <svg id="connections"></svg>
+  </div>
+  <div id="empty-hint">
+    <h2>Start your story</h2>
+    <p>Click + Start, + Dialog, or + Decision above to add a node.</p>
+    <p style="margin-top:8px;">Drag from blue dots to connect nodes.</p>
+  </div>
+</div>
+
+<div id="zoom-info">100%</div>
+
+<div id="context-menu"></div>
+
+<input type="file" id="file-input" accept=".json" style="display:none">
+
+<script>
+// ============ STATE ============
+const state = {
+  nodes: {},
+  edges: [],
+  nextId: 1,
+  selected: null,
+  pan: { x: 0, y: 0 },
+  zoom: 1,
+  connecting: null,
+};
+
+const canvas = document.getElementById('canvas');
+const wrap = document.getElementById('canvas-wrap');
+const svg = document.getElementById('connections');
+const hint = document.getElementById('empty-hint');
+const zoomInfo = document.getElementById('zoom-info');
+
+// ============ TRANSFORM ============
+function applyTransform() {
+  canvas.style.transform = `translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.zoom})`;
+  zoomInfo.textContent = Math.round(state.zoom * 100) + '%';
+}
+applyTransform();
+
+// ============ NODE CREATION ============
+function addNode(type, x, y) {
+  const id = 'n' + state.nextId++;
+  const center = getCanvasCenter();
+  const node = {
+    id, type,
+    x: x ?? center.x - 120,
+    y: y ?? center.y - 60,
+    title: defaultTitle(type),
+    character: '',
+    text: '',
+    choices: type === 'decision' ? ['Yes', 'No'] : [],
+  };
+  state.nodes[id] = node;
+  renderNode(node);
+  hint.style.display = 'none';
+  return node;
+}
+
+function defaultTitle(type) {
+  if (type === 'dialog') return 'New Dialog';
+  if (type === 'decision') return 'New Decision';
+  if (type === 'start') return 'Story Start';
+  return 'Node';
+}
+
+function getCanvasCenter() {
+  const rect = wrap.getBoundingClientRect();
+  return {
+    x: (rect.width / 2 - state.pan.x) / state.zoom,
+    y: (rect.height / 2 - state.pan.y) / state.zoom,
+  };
+}
+
+// ============ NODE RENDER ============
+function renderNode(node) {
+  let el = document.getElementById(node.id);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = node.id;
+    el.className = 'node ' + node.type;
+    canvas.appendChild(el);
+  }
+  el.style.left = node.x + 'px';
+  el.style.top = node.y + 'px';
+
+  const icon = node.type === 'dialog' ? '💬' : node.type === 'decision' ? '🔀' : '▶';
+  const titleLabel = node.type.toUpperCase();
+
+  let bodyHTML = '';
+  if (node.type === 'dialog') {
+    bodyHTML = `
+      <div class="field">
+        <label>Character</label>
+        <input data-field="character" value="${escapeHTML(node.character)}" placeholder="e.g. Alice">
+      </div>
+      <div class="field">
+        <label>Dialog</label>
+        <textarea data-field="text" placeholder="What do they say?">${escapeHTML(node.text)}</textarea>
+      </div>
+    `;
+  } else if (node.type === 'decision') {
+    bodyHTML = `
+      <div class="field">
+        <label>Question / Situation</label>
+        <textarea data-field="text" placeholder="What's the choice?">${escapeHTML(node.text)}</textarea>
+      </div>
+      <div class="field">
+        <label>Choices</label>
+        <div class="choices" id="choices-${node.id}">
+          ${node.choices.map((c, i) => choiceHTML(node.id, i, c)).join('')}
+        </div>
+        <button class="add-choice" onclick="addChoice('${node.id}')">+ Add choice</button>
+      </div>
+    `;
+  } else if (node.type === 'start') {
+    bodyHTML = `
+      <div class="field">
+        <label>Story Title / Opening</label>
+        <textarea data-field="text" placeholder="The beginning of your story...">${escapeHTML(node.text)}</textarea>
+      </div>
+    `;
+  }
+
+  el.innerHTML = `
+    <div class="node-header">
+      <span class="node-icon">${icon}</span>
+      <span class="node-title">${titleLabel}</span>
+      <button class="node-delete" onclick="deleteNode('${node.id}')">✕</button>
+    </div>
+    <div class="node-body">${bodyHTML}</div>
+    ${node.type !== 'start' ? '<div class="port in" data-port="in" data-node="' + node.id + '"></div>' : ''}
+    ${renderOutPorts(node)}
+  `;
+
+  // wire input handlers
+  el.querySelectorAll('[data-field]').forEach(input => {
+    input.addEventListener('input', e => {
+      node[e.target.dataset.field] = e.target.value;
+    });
+    input.addEventListener('mousedown', e => e.stopPropagation());
+  });
+
+  // header drag
+  const header = el.querySelector('.node-header');
+  header.addEventListener('mousedown', e => startNodeDrag(e, node));
+
+  // ports
+  el.querySelectorAll('.port').forEach(p => {
+    p.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      startConnection(node.id, p.dataset.port, p.dataset.choice);
+    });
+    p.addEventListener('mouseup', e => {
+      e.stopPropagation();
+      finishConnection(node.id, p.dataset.port, p.dataset.choice);
+    });
+  });
+
+  redrawEdges();
+}
+
+function choiceHTML(nodeId, i, value) {
+  return `
+    <div class="choice" style="position:relative;">
+      <input value="${escapeHTML(value)}" oninput="updateChoice('${nodeId}', ${i}, this.value)" placeholder="Choice ${i+1}">
+      <button class="choice-remove" onclick="removeChoice('${nodeId}', ${i})">✕</button>
+    </div>
+  `;
+}
+
+function renderOutPorts(node) {
+  if (node.type === 'decision') {
+    // out ports per choice — positioned via JS after render
+    return node.choices.map((_, i) =>
+      `<div class="port out choice" data-port="out" data-node="${node.id}" data-choice="${i}" style="top:${getChoicePortY(node, i)}px;right:-8px;"></div>`
+    ).join('');
+  }
+  return `<div class="port out single" data-port="out" data-node="${node.id}"></div>`;
+}
+
+function getChoicePortY(node, choiceIdx) {
+  // approximate — header(~42) + question field(~75) + label(~22) + choices stacked
+  return 42 + 75 + 22 + 6 + (choiceIdx * 32) + 11;
+}
+
+function escapeHTML(s) {
+  return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ============ NODE DRAG ============
+let dragState = null;
+function startNodeDrag(e, node) {
+  if (e.target.classList.contains('node-delete')) return;
+  dragState = {
+    node,
+    startX: e.clientX,
+    startY: e.clientY,
+    nodeStartX: node.x,
+    nodeStartY: node.y,
+  };
+  selectNode(node.id);
+  e.preventDefault();
+}
+
+document.addEventListener('mousemove', e => {
+  if (dragState) {
+    const dx = (e.clientX - dragState.startX) / state.zoom;
+    const dy = (e.clientY - dragState.startY) / state.zoom;
+    dragState.node.x = dragState.nodeStartX + dx;
+    dragState.node.y = dragState.nodeStartY + dy;
+    const el = document.getElementById(dragState.node.id);
+    el.style.left = dragState.node.x + 'px';
+    el.style.top = dragState.node.y + 'px';
+    redrawEdges();
+  }
+  if (panState) {
+    state.pan.x = panState.startPanX + (e.clientX - panState.startX);
+    state.pan.y = panState.startPanY + (e.clientY - panState.startY);
+    applyTransform();
+  }
+  if (state.connecting) {
+    drawTempConnection(e);
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  dragState = null;
+  panState = null;
+  wrap.classList.remove('panning');
+  if (state.connecting) {
+    cancelConnection();
+  }
+});
+
+// ============ PAN ============
+let panState = null;
+wrap.addEventListener('mousedown', e => {
+  if (e.target === wrap || e.target === canvas || e.target === svg) {
+    panState = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startPanX: state.pan.x,
+      startPanY: state.pan.y,
+    };
+    wrap.classList.add('panning');
+    selectNode(null);
+  }
+});
+
+// ============ ZOOM ============
+wrap.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = wrap.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const delta = e.deltaY > 0 ? 0.9 : 1.1;
+  const newZoom = Math.max(0.2, Math.min(2, state.zoom * delta));
+  // zoom toward cursor
+  state.pan.x = mx - (mx - state.pan.x) * (newZoom / state.zoom);
+  state.pan.y = my - (my - state.pan.y) * (newZoom / state.zoom);
+  state.zoom = newZoom;
+  applyTransform();
+}, { passive: false });
+
+// ============ CONNECTIONS ============
+function startConnection(nodeId, portType, choiceIdx) {
+  if (portType !== 'out') return;
+  state.connecting = { fromId: nodeId, fromChoice: choiceIdx };
+}
+
+function finishConnection(nodeId, portType, choiceIdx) {
+  if (!state.connecting || portType !== 'in') return;
+  if (state.connecting.fromId === nodeId) { cancelConnection(); return; }
+  // remove existing edge from this source/choice
+  state.edges = state.edges.filter(e => !(e.from === state.connecting.fromId && e.fromChoice == state.connecting.fromChoice));
+  state.edges.push({
+    from: state.connecting.fromId,
+    fromChoice: state.connecting.fromChoice,
+    to: nodeId,
+  });
+  state.connecting = null;
+  redrawEdges();
+}
+
+function cancelConnection() {
+  state.connecting = null;
+  const temp = svg.querySelector('.temp');
+  if (temp) temp.remove();
+}
+
+function drawTempConnection(e) {
+  let temp = svg.querySelector('.temp');
+  if (!temp) {
+    temp = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    temp.classList.add('temp');
+    svg.appendChild(temp);
+  }
+  const fromPort = getOutPortPos(state.connecting.fromId, state.connecting.fromChoice);
+  if (!fromPort) return;
+  const rect = wrap.getBoundingClientRect();
+  const tx = (e.clientX - rect.left - state.pan.x) / state.zoom;
+  const ty = (e.clientY - rect.top - state.pan.y) / state.zoom;
+  temp.setAttribute('d', curvePath(fromPort.x, fromPort.y, tx, ty));
+}
+
+function getOutPortPos(nodeId, choiceIdx) {
+  const node = state.nodes[nodeId];
+  if (!node) return null;
+  const el = document.getElementById(nodeId);
+  if (!el) return null;
+  const w = el.offsetWidth;
+  let y;
+  if (node.type === 'decision' && choiceIdx != null) {
+    y = node.y + getChoicePortY(node, parseInt(choiceIdx));
+  } else {
+    y = node.y + el.offsetHeight / 2;
+  }
+  return { x: node.x + w, y };
+}
+
+function getInPortPos(nodeId) {
+  const node = state.nodes[nodeId];
+  if (!node) return null;
+  const el = document.getElementById(nodeId);
+  if (!el) return null;
+  return { x: node.x, y: node.y + el.offsetHeight / 2 };
+}
+
+function curvePath(x1, y1, x2, y2) {
+  const dx = Math.max(40, Math.abs(x2 - x1) * 0.5);
+  return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+}
+
+function redrawEdges() {
+  // remove non-temp paths
+  svg.querySelectorAll('path:not(.temp)').forEach(p => p.remove());
+  state.edges.forEach((edge, idx) => {
+    const from = getOutPortPos(edge.from, edge.fromChoice);
+    const to = getInPortPos(edge.to);
+    if (!from || !to) return;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', curvePath(from.x, from.y, to.x, to.y));
+    path.dataset.edgeIdx = idx;
+    path.style.pointerEvents = 'stroke';
+    path.addEventListener('mouseenter', () => path.classList.add('hover'));
+    path.addEventListener('mouseleave', () => path.classList.remove('hover'));
+    path.addEventListener('click', () => {
+      if (confirm('Delete this connection?')) {
+        state.edges.splice(idx, 1);
+        redrawEdges();
+      }
+    });
+    svg.appendChild(path);
+  });
+}
+
+// ============ SELECTION & DELETE ============
+function selectNode(id) {
+  document.querySelectorAll('.node.selected').forEach(n => n.classList.remove('selected'));
+  state.selected = id;
+  if (id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('selected');
+  }
+}
+
+function deleteNode(id) {
+  if (!confirm('Delete this node?')) return;
+  delete state.nodes[id];
+  state.edges = state.edges.filter(e => e.from !== id && e.to !== id);
+  const el = document.getElementById(id);
+  if (el) el.remove();
+  redrawEdges();
+  if (Object.keys(state.nodes).length === 0) hint.style.display = 'block';
+}
+
+// ============ CHOICES ============
+function addChoice(nodeId) {
+  const node = state.nodes[nodeId];
+  node.choices.push('Choice ' + (node.choices.length + 1));
+  renderNode(node);
+}
+function removeChoice(nodeId, idx) {
+  const node = state.nodes[nodeId];
+  node.choices.splice(idx, 1);
+  // remove edges from this choice and reindex
+  state.edges = state.edges.filter(e => !(e.from === nodeId && e.fromChoice == idx));
+  state.edges.forEach(e => {
+    if (e.from === nodeId && parseInt(e.fromChoice) > idx) {
+      e.fromChoice = parseInt(e.fromChoice) - 1;
+    }
+  });
+  renderNode(node);
+}
+function updateChoice(nodeId, idx, value) {
+  state.nodes[nodeId].choices[idx] = value;
+}
+
+// ============ FIT / ZOOM CONTROLS ============
+function zoomFit() {
+  const ids = Object.keys(state.nodes);
+  if (ids.length === 0) {
+    state.pan = { x: 0, y: 0 };
+    state.zoom = 1;
+    applyTransform();
+    return;
+  }
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  ids.forEach(id => {
+    const node = state.nodes[id];
+    const el = document.getElementById(id);
+    minX = Math.min(minX, node.x);
+    minY = Math.min(minY, node.y);
+    maxX = Math.max(maxX, node.x + (el?.offsetWidth || 260));
+    maxY = Math.max(maxY, node.y + (el?.offsetHeight || 200));
+  });
+  const rect = wrap.getBoundingClientRect();
+  const padding = 60;
+  const zoomX = (rect.width - padding * 2) / (maxX - minX);
+  const zoomY = (rect.height - padding * 2) / (maxY - minY);
+  state.zoom = Math.min(1, Math.min(zoomX, zoomY));
+  state.pan.x = padding - minX * state.zoom + (rect.width - padding * 2 - (maxX - minX) * state.zoom) / 2;
+  state.pan.y = padding - minY * state.zoom + (rect.height - padding * 2 - (maxY - minY) * state.zoom) / 2;
+  applyTransform();
+}
+
+// ============ SAVE / LOAD ============
+function exportJSON() {
+  const data = {
+    nodes: state.nodes,
+    edges: state.edges,
+    nextId: state.nextId,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'novel-flow-' + Date.now() + '.json';
+  a.click();
+}
+
+function importJSON() {
+  document.getElementById('file-input').click();
+}
+
+document.getElementById('file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      // clear current
+      Object.keys(state.nodes).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+      });
+      state.nodes = data.nodes || {};
+      state.edges = data.edges || [];
+      state.nextId = data.nextId || 1;
+      Object.values(state.nodes).forEach(renderNode);
+      redrawEdges();
+      hint.style.display = Object.keys(state.nodes).length === 0 ? 'block' : 'none';
+      zoomFit();
+    } catch (err) {
+      alert('Failed to load: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
+function saveProject() {
+  try {
+    const data = JSON.stringify({
+      nodes: state.nodes,
+      edges: state.edges,
+      nextId: state.nextId,
+    });
+    // in-memory only for now (per artifact rules); also offer download
+    window._novelFlowSave = data;
+    exportJSON();
+  } catch (e) {
+    alert('Save failed: ' + e.message);
+  }
+}
+
+// ============ KEYBOARD ============
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (state.selected) deleteNode(state.selected);
+  }
+  if (e.key === 'd' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    addNode('dialog');
+  }
+  if (e.key === 'f') {
+    zoomFit();
+  }
+});
+
+// ============ DEMO SETUP ============
+function loadDemo() {
+  const start = addNode('start', 100, 200);
+  start.text = "It was a dark and stormy night. Sarah stood at the door of the old mansion...";
+  renderNode(start);
+
+  const d1 = addNode('dialog', 450, 200);
+  d1.character = 'Sarah';
+  d1.text = "Should I really go in? The door is open...";
+  renderNode(d1);
+
+  const dec = addNode('decision', 800, 150);
+  dec.text = "What does Sarah do?";
+  dec.choices = ['Enter the mansion', 'Turn back home', 'Call for help'];
+  renderNode(dec);
+
+  const d2 = addNode('dialog', 1150, 50);
+  d2.character = 'Narrator';
+  d2.text = "Sarah pushed the door open. The hinges creaked ominously.";
+  renderNode(d2);
+
+  const d3 = addNode('dialog', 1150, 250);
+  d3.character = 'Sarah';
+  d3.text = "This is a bad idea. I'm going home.";
+  renderNode(d3);
+
+  const d4 = addNode('dialog', 1150, 450);
+  d4.character = 'Sarah';
+  d4.text = "Hello?! Is anyone out there?";
+  renderNode(d4);
+
+  state.edges.push({ from: start.id, fromChoice: undefined, to: d1.id });
+  state.edges.push({ from: d1.id, fromChoice: undefined, to: dec.id });
+  state.edges.push({ from: dec.id, fromChoice: '0', to: d2.id });
+  state.edges.push({ from: dec.id, fromChoice: '1', to: d3.id });
+  state.edges.push({ from: dec.id, fromChoice: '2', to: d4.id });
+
+  redrawEdges();
+  setTimeout(zoomFit, 50);
+}
+
+// load demo on first run
+loadDemo();
+
+// click on node body selects it
+document.addEventListener('click', e => {
+  const nodeEl = e.target.closest('.node');
+  if (nodeEl) selectNode(nodeEl.id);
+});
+</script>
+</body>
+</html>
