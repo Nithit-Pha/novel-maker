@@ -1,6 +1,6 @@
 # Novel Flow
 
-A flowchart-style tool for writers to plan novels and branching stories. Build narratives with **Dialog** nodes (a character speaking) and **Decision** nodes (a choice that splits the story), then play through the result like an interactive slideshow.
+A flowchart-style tool for writers to plan novels and branching stories. Build narratives with **Dialog** nodes (a character speaking) and **Decision** nodes (a choice that splits the story), then play through the result like an interactive slideshow. Define reusable characters in the **Library**, and save whole projects to a folder on disk.
 
 Built with React + TypeScript + React Flow.
 
@@ -53,10 +53,39 @@ You can deploy the contents of `dist/` to any static host (Netlify, Vercel, GitH
 - **Restart** to play again from the beginning
 - Decisions with no wired branch show "(unconnected)" so you can spot gaps in your graph
 
+### Character Library
+- Click **📚 Library** in the toolbar to open a panel docked to the right side
+- Two tabs: **Character** and **Scene** (Scene is a placeholder for now)
+- The Character tab lists every character; **+ Character** at the top creates a new one
+- Each character has:
+  - **Name**
+  - **Image** — upload a portrait (stored inline as a data URL, 3 MB max)
+  - **Outfit** — add any number of designs, each with a name + description
+  - **Personality** — add any number of traits, each with a custom 0–10 power bar
+  - **Ability** — add any number of abilities, each with a custom 0–10 power bar
+  - **Description** — free-form notes / backstory
+- Characters are stored separately in browser localStorage (`novel-flow-characters-v1`), so they persist across visits and survive canvas changes
+
 ### Persistence
 - **Save** stores your project in browser localStorage (auto-loads on next visit)
 - **Export** / **Import** as `.json` so you can keep snapshots, share with collaborators, or move projects between machines
 - **Clear** wipes the canvas (still undoable)
+
+### Saves (save to a folder on disk)
+- Click **💾 Saves** to open the save manager
+- **Choose a saves folder** once — the app remembers it across sessions (the folder handle is kept in IndexedDB) and reconnects with a one-click permission grant on later visits
+- Type a name and **Save** to write a self-contained project folder:
+
+  ```
+  <your saves folder>/
+    My Story/
+      story/story.json            # nodes + edges
+      characters/characters.json  # the character library
+      project.json                # name + last-saved timestamp
+  ```
+
+- Every saved project is listed with its last-saved time; **Load** brings a project back onto the canvas (replacing the current story + characters, with a confirmation), and **✕** deletes it from the folder
+- Uses the browser's [File System Access API](https://developer.mozilla.org/docs/Web/API/File_System_API), so it works in **Chrome and Edge**. Other browsers show a notice; the localStorage **Save** and **Export** buttons remain as fallbacks
 
 ## Keyboard shortcuts
 
@@ -76,8 +105,8 @@ You can deploy the contents of `dist/` to any static host (Netlify, Vercel, GitH
 
 ```
 src/
-  App.tsx              # canvas + ReactFlowProvider + play state
-  Toolbar.tsx          # top bar (add nodes, undo, redo, run, save, export, import)
+  App.tsx              # canvas + ReactFlowProvider + play/library/saves state
+  Toolbar.tsx          # top bar (add nodes, undo, redo, library, run, saves, export, import)
   PlayMode.tsx         # full-screen story player
   store.ts             # Zustand store: nodes, edges, history, persistence
   types.ts             # TypeScript types for node data
@@ -85,6 +114,13 @@ src/
     StartNode.tsx      # story-opening node
     DialogNode.tsx     # character + dialog text
     DecisionNode.tsx   # prompt + dynamic list of choices, one handle each
+  library/
+    libraryTypes.ts    # Character / Outfit / PowerStat types + helpers
+    characterStore.ts  # Zustand store for the character library (localStorage)
+    LibraryPanel.tsx   # right-side panel: Character / Scene tabs + character list
+    CharacterEditor.tsx# form for a single character (name, image, outfits, stats, ...)
+    savesFs.ts         # File System Access API helpers (pick folder, save/load/list)
+    SavesPanel.tsx     # save manager dialog (folder-based projects)
   index.css            # Tailwind + React Flow theme overrides
   main.tsx             # React entry point
 ```
@@ -101,7 +137,9 @@ src/
 
 - ~~Undo / redo~~ ✓
 - ~~"Play through" mode~~ ✓
-- Character library (define a character once, reuse the name)
+- ~~Character library (define a character once, reuse the name)~~ ✓ — *next: reference library characters from Dialog nodes*
+- ~~Save projects to a folder on disk~~ ✓
+- Scene library (the Library panel's second tab is stubbed out)
 - Variables and conditional branches (e.g. `if hasKey -> open door`)
 - Auto-layout (dagre or elk)
 - Export as a screenplay-style script (.docx) or as Twine/Ink
