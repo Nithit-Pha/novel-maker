@@ -14,6 +14,8 @@ import DialogNode from './nodes/DialogNode';
 import DecisionNode from './nodes/DecisionNode';
 import Toolbar from './Toolbar';
 import PlayMode from './PlayMode';
+import LibraryPanel from './library/LibraryPanel';
+import SavesPanel from './library/SavesPanel';
 
 const nodeTypes: NodeTypes = {
   start: StartNode,
@@ -31,6 +33,8 @@ function FlowCanvas() {
   const loadLocal = useFlowStore((s) => s.loadLocal);
 
   const [playing, setPlaying] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [savesOpen, setSavesOpen] = useState(false);
 
   useEffect(() => {
     loadLocal();
@@ -38,7 +42,12 @@ function FlowCanvas() {
 
   return (
     <div className="h-screen w-screen flex flex-col">
-      <Toolbar onPlay={() => setPlaying(true)} />
+      <Toolbar
+        onPlay={() => setPlaying(true)}
+        onToggleLibrary={() => setLibraryOpen((v) => !v)}
+        libraryOpen={libraryOpen}
+        onOpenSaves={() => setSavesOpen(true)}
+      />
       <div className="flex-1 relative">
         <ReactFlow
           nodes={nodes}
@@ -64,7 +73,9 @@ function FlowCanvas() {
             maskColor="rgba(15,25,41,0.7)"
           />
         </ReactFlow>
+        {libraryOpen && <LibraryPanel onClose={() => setLibraryOpen(false)} />}
       </div>
+      {savesOpen && <SavesPanel onClose={() => setSavesOpen(false)} />}
       {playing && (
         <PlayMode nodes={nodes} edges={edges} onClose={() => setPlaying(false)} />
       )}

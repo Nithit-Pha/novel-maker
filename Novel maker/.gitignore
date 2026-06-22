@@ -50,3 +50,12 @@ pnpm-lock.yaml
 # Project-specific exports / scratch
 *.json.bak
 novel-flow-*.json
+
+# Claude / agent local files
+.claude/
+
+# Vite temp config builds
+vite.config.ts.timestamp-*
+
+# npm pack output
+*.tgz

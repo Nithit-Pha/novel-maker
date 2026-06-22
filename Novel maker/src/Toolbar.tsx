@@ -5,9 +5,12 @@ import type { NodeKind } from './types';
 
 interface Props {
   onPlay: () => void;
+  onToggleLibrary: () => void;
+  libraryOpen: boolean;
+  onOpenSaves: () => void;
 }
 
-export default function Toolbar({ onPlay }: Props) {
+export default function Toolbar({ onPlay, onToggleLibrary, libraryOpen, onOpenSaves }: Props) {
   const addNode = useFlowStore((s) => s.addNode);
   const exportJSON = useFlowStore((s) => s.exportJSON);
   const importJSON = useFlowStore((s) => s.importJSON);
@@ -119,8 +122,16 @@ export default function Toolbar({ onPlay }: Props) {
         ↷ Redo
       </button>
       <div className="flex-1" />
+      <button
+        onClick={onToggleLibrary}
+        className={libraryOpen ? btnPrimary : btn}
+        title="Open the character & scene library"
+      >
+        📚 Library
+      </button>
       <button onClick={onPlay} className={btnPlay} title="Play through the story">▶ Run</button>
       <div className="w-px h-6 bg-ink-600 mx-1" />
+      <button onClick={onOpenSaves} className={btnGhost} title="Save / load projects in a folder">💾 Saves</button>
       <button onClick={handleImport} className={btnGhost}>Import</button>
       <button onClick={handleExport} className={btnGhost}>Export</button>
       <button onClick={handleReset} className={btnGhost}>Clear</button>
