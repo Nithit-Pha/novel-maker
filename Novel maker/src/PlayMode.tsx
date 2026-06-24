@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Edge, Node } from '@xyflow/react';
-import type { NodeData, DialogData, DecisionData, StartData } from './types';
+import type { NodeData, DialogData, DecisionData, SceneData } from './types';
 
 interface Props {
   nodes: Node<NodeData>[];
@@ -8,10 +8,8 @@ interface Props {
   onClose: () => void;
 }
 
-// Find the entry point: prefer a Start node; otherwise pick a node with no incoming edges.
+// Find the entry point: pick a node with no incoming edges, else the first node.
 function findStart(nodes: Node<NodeData>[], edges: Edge[]): Node<NodeData> | null {
-  const start = nodes.find((n) => n.type === 'start');
-  if (start) return start;
   const targets = new Set(edges.map((e) => e.target));
   const orphans = nodes.filter((n) => !targets.has(n.id));
   return orphans[0] ?? nodes[0] ?? null;
@@ -133,9 +131,9 @@ export default function PlayMode({ nodes, edges, onClose }: Props) {
             </div>
           )}
 
-          {current && current.type === 'start' && (
-            <StartCard
-              data={current.data as StartData}
+          {current && current.type === 'scene' && (
+            <SceneCard
+              data={current.data as SceneData}
               onNext={() => goNext()}
               hasNext={!!nextNodeId(current.id, edges)}
             />
@@ -179,20 +177,20 @@ export default function PlayMode({ nodes, edges, onClose }: Props) {
   );
 }
 
-function StartCard({ data, onNext, hasNext }: { data: StartData; onNext: () => void; hasNext: boolean }) {
+function SceneCard({ data, onNext, hasNext }: { data: SceneData; onNext: () => void; hasNext: boolean }) {
   return (
-    <div className="text-center animate-fade-in">
-      <div className="text-accent-start text-xs font-semibold uppercase tracking-[0.3em] mb-6">
-        ▶ Story Begins
+    <div className="animate-fade-in">
+      <div className="text-accent-scene text-xs font-semibold uppercase tracking-[0.3em] mb-3">
+        🎬 {data.background || 'Scene'}
       </div>
       <p className="text-2xl text-gray-200 leading-relaxed font-light mb-10 italic">
-        {data.text || <span className="text-gray-600">(empty opening)</span>}
+        {data.description || <span className="text-gray-600">(no description)</span>}
       </p>
       <button
         onClick={onNext}
-        className="bg-accent hover:bg-accent/90 text-white px-8 py-3 rounded text-lg"
+        className="bg-accent-scene hover:bg-purple-500 text-white px-6 py-2.5 rounded"
       >
-        {hasNext ? 'Begin →' : 'The End'}
+        {hasNext ? 'Next →' : 'The End'}
       </button>
     </div>
   );

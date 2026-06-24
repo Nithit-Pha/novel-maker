@@ -9,18 +9,18 @@ import {
   type NodeTypes,
 } from '@xyflow/react';
 import { useFlowStore } from './store';
-import StartNode from './nodes/StartNode';
 import DialogNode from './nodes/DialogNode';
 import DecisionNode from './nodes/DecisionNode';
+import SceneNode from './nodes/SceneNode';
 import Toolbar from './Toolbar';
 import PlayMode from './PlayMode';
 import LibraryPanel from './library/LibraryPanel';
 import SavesPanel from './library/SavesPanel';
 
 const nodeTypes: NodeTypes = {
-  start: StartNode,
   dialog: DialogNode,
   decision: DecisionNode,
+  scene: SceneNode,
 };
 
 function FlowCanvas() {
@@ -68,6 +68,7 @@ function FlowCanvas() {
             nodeColor={(n) => {
               if (n.type === 'dialog') return '#4a7aff';
               if (n.type === 'decision') return '#ffaa44';
+              if (n.type === 'scene') return '#a86aff';
               return '#44dd88';
             }}
             maskColor="rgba(15,25,41,0.7)"

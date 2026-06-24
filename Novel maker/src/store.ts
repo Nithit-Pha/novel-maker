@@ -49,9 +49,9 @@ interface FlowState {
 }
 
 function defaultData(kind: NodeKind): NodeData {
-  if (kind === 'dialog') return { kind, character: '', text: '' };
   if (kind === 'decision') return { kind, prompt: '', choices: ['Yes', 'No'] };
-  return { kind: 'start', text: '' };
+  if (kind === 'scene') return { kind, background: '', description: '' };
+  return { kind: 'dialog', character: '', text: '' };
 }
 
 function snapshot(s: Pick<FlowState, 'nodes' | 'edges' | 'nextId'>): Snapshot {
@@ -66,9 +66,13 @@ function snapshot(s: Pick<FlowState, 'nodes' | 'edges' | 'nextId'>): Snapshot {
 const demoNodes: Node<NodeData>[] = [
   {
     id: 'n1',
-    type: 'start',
+    type: 'scene',
     position: { x: 0, y: 200 },
-    data: { kind: 'start', text: 'It was a dark and stormy night. Sarah stood at the door of the old mansion...' },
+    data: {
+      kind: 'scene',
+      background: 'Old mansion, stormy night',
+      description: 'It was a dark and stormy night. Sarah stood at the door of the old mansion...',
+    },
   },
   {
     id: 'n2',

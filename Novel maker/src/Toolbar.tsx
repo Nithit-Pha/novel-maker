@@ -102,8 +102,8 @@ export default function Toolbar({ onPlay, onToggleLibrary, libraryOpen, onOpenSa
     <div className="h-14 bg-ink-800 border-b border-ink-600 flex items-center px-4 gap-2 flex-shrink-0">
       <h1 className="text-accent font-semibold mr-4">Novel Flow</h1>
       <button onClick={() => handleAdd('dialog')} className={btn}>+ Dialog</button>
+      <button onClick={() => handleAdd('scene')} className={btn}>+ Scene</button>
       <button onClick={() => handleAdd('decision')} className={btn}>+ Decision</button>
-      <button onClick={() => handleAdd('start')} className={btn}>+ Start</button>
       <div className="w-px h-6 bg-ink-600 mx-1" />
       <button
         onClick={undo}

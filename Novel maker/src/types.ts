@@ -1,4 +1,4 @@
-export type NodeKind = 'start' | 'dialog' | 'decision';
+export type NodeKind = 'dialog' | 'decision' | 'scene';
 
 // @xyflow/react v12 requires a node's `data` to be assignable to
 // Record<string, unknown>, so each data interface carries an index signature.
@@ -16,10 +16,11 @@ export interface DecisionData {
   [key: string]: unknown;
 }
 
-export interface StartData {
-  kind: 'start';
-  text: string;
+export interface SceneData {
+  kind: 'scene';
+  background: string;
+  description: string;
   [key: string]: unknown;
 }
 
-export type NodeData = DialogData | DecisionData | StartData;
+export type NodeData = DialogData | DecisionData | SceneData;
