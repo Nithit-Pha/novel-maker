@@ -1,12 +1,13 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import { useFlowStore } from '../store';
 import type { DecisionData } from '../types';
+import NodeHeader from './NodeHeader';
+import TagBar from './TagBar';
 
 type DecisionNodeType = Node<DecisionData, 'decision'>;
 
 export default function DecisionNode({ id, data, selected }: NodeProps<DecisionNodeType>) {
   const updateNodeData = useFlowStore((s) => s.updateNodeData);
-  const deleteNode = useFlowStore((s) => s.deleteNode);
 
   const setChoice = (idx: number, value: string) => {
     const choices = [...data.choices];
@@ -26,20 +27,11 @@ export default function DecisionNode({ id, data, selected }: NodeProps<DecisionN
   return (
     <div
       className={`min-w-[280px] max-w-[320px] bg-ink-800 border-2 rounded-lg shadow-lg ${
-        selected ? 'border-accent' : 'border-accent-decision'
+        selected ? 'border-accent' : data.pinned ? 'border-accent-decision' : 'border-accent-decision'
       }`}
     >
       <Handle type="target" position={Position.Left} id="in" />
-      <div className="px-3 py-2 border-b border-ink-600 flex items-center gap-2 bg-black/20 rounded-t-lg">
-        <span className="text-base">🔀</span>
-        <span className="text-xs font-semibold uppercase tracking-wider text-accent-decision flex-1">Decision</span>
-        <button
-          onClick={() => deleteNode(id)}
-          className="text-gray-500 hover:text-white hover:bg-accent rounded px-1.5 text-sm"
-        >
-          ✕
-        </button>
-      </div>
+      <NodeHeader id={id} icon="🔀" label="Decision" accentText="text-accent-decision" pinned={data.pinned} />
       <div className="p-3 space-y-2">
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">Question / Situation</label>
@@ -85,6 +77,7 @@ export default function DecisionNode({ id, data, selected }: NodeProps<DecisionN
             + Add choice
           </button>
         </div>
+        <TagBar id={id} tags={data.tags} accentBorder="focus:border-accent-decision" />
       </div>
     </div>
   );

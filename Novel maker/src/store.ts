@@ -34,7 +34,11 @@ interface FlowState {
   addNode: (kind: NodeKind, position?: { x: number; y: number }) => void;
   updateNodeData: (id: string, patch: Partial<NodeData>) => void;
   deleteNode: (id: string) => void;
+  removeLoopItem: (nodeId: string, itemId: string) => void;
   commitDrag: () => void;
+  togglePin: (id: string) => void;
+  setNodeTags: (id: string, tags: string[]) => void;
+  selectOnly: (id: string) => void;
 
   undo: () => void;
   redo: () => void;
@@ -49,9 +53,28 @@ interface FlowState {
 }
 
 function defaultData(kind: NodeKind): NodeData {
+  if (kind === 'chapter') return { kind, name: '' };
   if (kind === 'decision') return { kind, prompt: '', choices: ['Yes', 'No'] };
   if (kind === 'scene') return { kind, background: '', description: '' };
+  if (kind === 'loop')
+    return { kind, title: '', items: [{ id: crypto.randomUUID(), label: 'Item 1' }] };
   return { kind: 'dialog', character: '', text: '' };
+}
+
+// Convert legacy saves to the current schema. Old files used a 'start' node
+// (removed when Scene/Chapter were introduced); without this they render as
+// unstyled default nodes. Map them to a Chapter node.
+function migrateNodes(nodes: unknown): Node<NodeData>[] {
+  if (!Array.isArray(nodes)) return [];
+  return nodes.map((n) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const node = n as any;
+    if (node.type === 'start' || node.data?.kind === 'start') {
+      const name = node.data?.name || node.data?.text || 'Chapter 1';
+      return { ...node, type: 'chapter', data: { ...node.data, kind: 'chapter', name } } as Node<NodeData>;
+    }
+    return node as Node<NodeData>;
+  });
 }
 
 function snapshot(s: Pick<FlowState, 'nodes' | 'edges' | 'nextId'>): Snapshot {
@@ -64,6 +87,12 @@ function snapshot(s: Pick<FlowState, 'nodes' | 'edges' | 'nextId'>): Snapshot {
 }
 
 const demoNodes: Node<NodeData>[] = [
+  {
+    id: 'c1',
+    type: 'chapter',
+    position: { x: -350, y: 200 },
+    data: { kind: 'chapter', name: 'Chapter 1 — The Mansion' },
+  },
   {
     id: 'n1',
     type: 'scene',
@@ -111,6 +140,7 @@ const demoNodes: Node<NodeData>[] = [
 ];
 
 const demoEdges: Edge[] = [
+  { id: 'e0', source: 'c1', target: 'n1' },
   { id: 'e1', source: 'n1', target: 'n2' },
   { id: 'e2', source: 'n2', target: 'n3' },
   { id: 'e3', source: 'n3', sourceHandle: 'choice-0', target: 'n4' },
@@ -186,6 +216,46 @@ export const useFlowStore = create<FlowState>((set, get) => {
       });
     },
 
+    togglePin: (id) => {
+      pushHistory();
+      set({
+        nodes: get().nodes.map((n) =>
+          n.id === id ? { ...n, data: { ...n.data, pinned: !n.data.pinned } as NodeData } : n
+        ),
+      });
+    },
+
+    setNodeTags: (id, tags) => {
+      pushHistory();
+      set({
+        nodes: get().nodes.map((n) =>
+          n.id === id ? { ...n, data: { ...n.data, tags } as NodeData } : n
+        ),
+      });
+    },
+
+    selectOnly: (id) => {
+      // Pure selection change (no history): highlight one node, clear others.
+      set({
+        nodes: get().nodes.map((n) => ({ ...n, selected: n.id === id })),
+      });
+    },
+
+    removeLoopItem: (nodeId, itemId) => {
+      pushHistory();
+      set({
+        nodes: get().nodes.map((n) => {
+          if (n.id !== nodeId || n.data.kind !== 'loop') return n;
+          const items = n.data.items.filter((it) => it.id !== itemId);
+          return { ...n, data: { ...n.data, items } };
+        }),
+        // drop the edge wired from the removed item's handle
+        edges: get().edges.filter(
+          (e) => !(e.source === nodeId && e.sourceHandle === `item-${itemId}`)
+        ),
+      });
+    },
+
     commitDrag: () => {
       // Called once when a drag ends — snapshots so undo restores pre-drag positions.
       pushHistory();
@@ -233,7 +303,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
       try {
         const data = JSON.parse(raw);
         set({
-          nodes: data.nodes ?? [],
+          nodes: migrateNodes(data.nodes),
           edges: data.edges ?? [],
           nextId: data.nextId ?? 1,
           past: [],
@@ -255,7 +325,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
         const data = JSON.parse(json);
         pushHistory();
         set({
-          nodes: data.nodes ?? [],
+          nodes: migrateNodes(data.nodes),
           edges: data.edges ?? [],
           nextId: data.nextId ?? 1,
         });

@@ -65,6 +65,13 @@ body {
   color: #4a5a7a !important;
 }
 
+/* Tag filter: dim nodes that don't match the active tags */
+.react-flow__node.nf-dim {
+  opacity: 0.16;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
 /* Play mode card transition */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }

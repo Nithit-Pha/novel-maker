@@ -1,25 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Edge, Node } from '@xyflow/react';
-import type { NodeData, DialogData, DecisionData, SceneData } from './types';
+import type { NodeData, ChapterData, DialogData, DecisionData, SceneData, LoopData } from './types';
+import { findStart, nextNodeId, resolveArrival, type PlayState } from './engine';
 
 interface Props {
   nodes: Node<NodeData>[];
   edges: Edge[];
   onClose: () => void;
-}
-
-// Find the entry point: pick a node with no incoming edges, else the first node.
-function findStart(nodes: Node<NodeData>[], edges: Edge[]): Node<NodeData> | null {
-  const targets = new Set(edges.map((e) => e.target));
-  const orphans = nodes.filter((n) => !targets.has(n.id));
-  return orphans[0] ?? nodes[0] ?? null;
-}
-
-function nextNodeId(currentId: string, edges: Edge[], handleId?: string): string | null {
-  const edge = edges.find(
-    (e) => e.source === currentId && (handleId ? e.sourceHandle === handleId : true)
-  );
-  return edge?.target ?? null;
 }
 
 export default function PlayMode({ nodes, edges, onClose }: Props) {
@@ -30,37 +17,56 @@ export default function PlayMode({ nodes, edges, onClose }: Props) {
     return m;
   }, [nodes]);
 
-  const [currentId, setCurrentId] = useState<string | null>(start?.id ?? null);
-  const [history, setHistory] = useState<string[]>([]);
+  const initial = useMemo<PlayState>(
+    () =>
+      start
+        ? resolveArrival(start.id, [], {}, edges, nodeMap)
+        : { currentId: null, callStack: [], progress: {} },
+    [start, edges, nodeMap]
+  );
 
+  const [state, setState] = useState<PlayState>(initial);
+  const [history, setHistory] = useState<PlayState[]>([]);
+
+  const { currentId, callStack, progress } = state;
   const current = currentId ? nodeMap.get(currentId) : null;
 
+  const pushHistory = () => setHistory((h) => [...h, state]);
+
+  // Navigate from the current node via an optional handle (dialog/scene next, decision choice).
   const goNext = (handleId?: string) => {
     if (!currentId) return;
-    const next = nextNodeId(currentId, edges, handleId);
-    if (next) {
-      setHistory((h) => [...h, currentId]);
-      setCurrentId(next);
+    const target = nextNodeId(currentId, edges, handleId);
+    pushHistory();
+    if (target) {
+      setState(resolveArrival(target, callStack, progress, edges, nodeMap));
     } else {
-      // dead end → mark as ended by setting a sentinel; we'll detect this in render
-      setHistory((h) => [...h, currentId]);
-      setCurrentId(null);
+      setState({ currentId: null, callStack, progress });
     }
+  };
+
+  // Player picks an item inside a loop → enter that item's branch.
+  const enterItem = (loopId: string, itemId: string) => {
+    const target = nextNodeId(loopId, edges, `item-${itemId}`);
+    if (!target) return; // unwired (button is disabled anyway)
+    pushHistory();
+    const cs = [...callStack, { hubId: loopId, itemId }];
+    setState(resolveArrival(target, cs, progress, edges, nodeMap));
   };
 
   const goBack = () => {
     if (history.length === 0) return;
     const prev = history[history.length - 1];
     setHistory((h) => h.slice(0, -1));
-    setCurrentId(prev);
+    setState(prev);
   };
 
   const restart = () => {
-    setCurrentId(start?.id ?? null);
+    setState(initial);
     setHistory([]);
   };
 
-  // keyboard: Esc to exit, ArrowLeft = back, ArrowRight/Space = next (only single-output nodes)
+  // keyboard: Esc exit, ArrowLeft/Backspace back, ArrowRight/Space next (non-branching cards only)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -68,7 +74,7 @@ export default function PlayMode({ nodes, edges, onClose }: Props) {
         if (history.length > 0) goBack();
       }
       if (e.key === 'ArrowRight' || e.key === ' ') {
-        if (current && current.type !== 'decision') {
+        if (current && current.type !== 'decision' && current.type !== 'loop') {
           e.preventDefault();
           goNext();
         }
@@ -131,6 +137,14 @@ export default function PlayMode({ nodes, edges, onClose }: Props) {
             </div>
           )}
 
+          {current && current.type === 'chapter' && (
+            <ChapterCard
+              data={current.data as ChapterData}
+              onNext={() => goNext()}
+              hasNext={!!nextNodeId(current.id, edges)}
+            />
+          )}
+
           {current && current.type === 'scene' && (
             <SceneCard
               data={current.data as SceneData}
@@ -154,6 +168,15 @@ export default function PlayMode({ nodes, edges, onClose }: Props) {
               onChoose={(idx) => goNext(`choice-${idx}`)}
             />
           )}
+
+          {current && current.type === 'loop' && (
+            <LoopCard
+              data={current.data as LoopData}
+              done={progress[current.id] ?? []}
+              edges={edges.filter((e) => e.source === current.id)}
+              onPick={(itemId) => enterItem(current.id, itemId)}
+            />
+          )}
         </div>
       </div>
 
@@ -169,10 +192,29 @@ export default function PlayMode({ nodes, edges, onClose }: Props) {
         <span>
           {current?.type === 'decision'
             ? 'Click a choice to continue'
+            : current?.type === 'loop'
+            ? 'Complete every item to continue'
             : 'Press Space or → to continue · Esc to exit'}
         </span>
         <span className="opacity-0 px-3 py-1.5">placeholder</span>
       </div>
+    </div>
+  );
+}
+
+function ChapterCard({ data, onNext, hasNext }: { data: ChapterData; onNext: () => void; hasNext: boolean }) {
+  return (
+    <div className="animate-fade-in text-center">
+      <div className="text-accent-start text-xs font-semibold uppercase tracking-[0.3em] mb-4">📖 Chapter</div>
+      <h2 className="text-4xl text-white font-light mb-10">
+        {data.name || <span className="text-gray-600">(untitled chapter)</span>}
+      </h2>
+      <button
+        onClick={onNext}
+        className="bg-accent-start hover:bg-green-500 text-ink-900 font-semibold px-6 py-2.5 rounded"
+      >
+        {hasNext ? 'Begin \u2192' : 'The End'}
+      </button>
     </div>
   );
 }
@@ -243,6 +285,60 @@ function DecisionCard({
             >
               <span className="text-accent-decision mr-3 font-semibold">{idx + 1}.</span>
               <span className="text-lg">{choice || <span className="text-gray-500 italic">(empty choice)</span>}</span>
+              {!wired && (
+                <span className="ml-3 text-xs text-gray-500 group-hover:text-yellow-500">(unconnected)</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function LoopCard({
+  data,
+  done,
+  edges,
+  onPick,
+}: {
+  data: LoopData;
+  done: string[];
+  edges: Edge[];
+  onPick: (itemId: string) => void;
+}) {
+  const total = data.items.length;
+  const completed = data.items.filter((it) => done.includes(it.id)).length;
+  return (
+    <div className="animate-fade-in">
+      <div className="text-accent-loop text-xs font-semibold uppercase tracking-[0.3em] mb-3 flex items-center gap-3">
+        🔁 Loop
+        <span className="text-gray-500 normal-case tracking-normal">
+          {completed} / {total} done
+        </span>
+      </div>
+      <p className="text-2xl text-gray-100 leading-relaxed font-light mb-8">
+        {data.title || <span className="text-gray-600">(complete every item to continue)</span>}
+      </p>
+      <div className="space-y-3">
+        {data.items.map((item) => {
+          const isDone = done.includes(item.id);
+          const wired = edges.some((e) => e.sourceHandle === `item-${item.id}`);
+          return (
+            <button
+              key={item.id}
+              onClick={() => onPick(item.id)}
+              disabled={isDone || !wired}
+              className={`w-full text-left border-2 px-5 py-4 rounded transition group ${
+                isDone
+                  ? 'bg-ink-900 border-ink-700 text-gray-500 cursor-default'
+                  : 'bg-ink-800 hover:bg-ink-700 hover:border-accent-loop border-ink-600 text-white disabled:opacity-40'
+              }`}
+            >
+              <span className="text-accent-loop mr-3 font-semibold">{isDone ? '✓' : '○'}</span>
+              <span className="text-lg">
+                {item.label || <span className="text-gray-500 italic">(unnamed item)</span>}
+              </span>
               {!wired && (
                 <span className="ml-3 text-xs text-gray-500 group-hover:text-yellow-500">(unconnected)</span>
               )}

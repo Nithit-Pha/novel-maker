@@ -50,6 +50,7 @@ pnpm-lock.yaml
 # Project-specific exports / scratch
 *.json.bak
 novel-flow-*.json
+my-story-*.html
 
 # Claude / agent local files
 .claude/

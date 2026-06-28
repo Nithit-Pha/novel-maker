@@ -17,6 +17,7 @@ export default {
           decision: '#ffaa44',
           start: '#44dd88',
           scene: '#a86aff',
+          loop: '#2dd4bf',
         },
       },
     },

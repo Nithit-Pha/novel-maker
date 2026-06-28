@@ -2,15 +2,30 @@ import { useEffect, useRef } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { useFlowStore } from './store';
 import type { NodeKind } from './types';
+import TagFilter from './TagFilter';
+import FunctionMenu from './FunctionMenu';
+import { useCharacterStore } from './library/characterStore';
+import { buildStoryHtml } from './export/exportHtml';
 
 interface Props {
   onPlay: () => void;
   onToggleLibrary: () => void;
   libraryOpen: boolean;
   onOpenSaves: () => void;
+  onOpenSearch: () => void;
+  activeTags: string[];
+  onChangeTags: (tags: string[]) => void;
 }
 
-export default function Toolbar({ onPlay, onToggleLibrary, libraryOpen, onOpenSaves }: Props) {
+export default function Toolbar({
+  onPlay,
+  onToggleLibrary,
+  libraryOpen,
+  onOpenSaves,
+  onOpenSearch,
+  activeTags,
+  onChangeTags,
+}: Props) {
   const addNode = useFlowStore((s) => s.addNode);
   const exportJSON = useFlowStore((s) => s.exportJSON);
   const importJSON = useFlowStore((s) => s.importJSON);
@@ -39,6 +54,17 @@ export default function Toolbar({ onPlay, onToggleLibrary, libraryOpen, onOpenSa
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `novel-flow-${Date.now()}.json`;
+    a.click();
+  };
+
+  const handleExportHtml = () => {
+    const { nodes, edges } = useFlowStore.getState();
+    const characters = useCharacterStore.getState().characters;
+    const html = buildStoryHtml({ nodes, edges, characters, title: 'My Story' });
+    const blob = new Blob([html], { type: 'text/html' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `my-story-${Date.now()}.html`;
     a.click();
   };
 
@@ -73,6 +99,12 @@ export default function Toolbar({ onPlay, onToggleLibrary, libraryOpen, onOpenSa
   // Global keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const mod0 = e.ctrlKey || e.metaKey;
+      if (mod0 && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        onOpenSearch();
+        return;
+      }
       const target = e.target as HTMLElement;
       // don't hijack typing in inputs/textareas
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
@@ -91,7 +123,7 @@ export default function Toolbar({ onPlay, onToggleLibrary, libraryOpen, onOpenSa
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo, saveLocal]);
+  }, [undo, redo, saveLocal, onOpenSearch]);
 
   const btn = 'bg-ink-700 hover:bg-ink-600 text-white border border-ink-600 px-3 py-1.5 rounded text-sm transition disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-ink-700';
   const btnGhost = 'hover:bg-ink-700 text-gray-300 hover:text-white px-3 py-1.5 rounded text-sm transition disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent';
@@ -103,7 +135,7 @@ export default function Toolbar({ onPlay, onToggleLibrary, libraryOpen, onOpenSa
       <h1 className="text-accent font-semibold mr-4">Novel Flow</h1>
       <button onClick={() => handleAdd('dialog')} className={btn}>+ Dialog</button>
       <button onClick={() => handleAdd('scene')} className={btn}>+ Scene</button>
-      <button onClick={() => handleAdd('decision')} className={btn}>+ Decision</button>
+      <FunctionMenu onAdd={handleAdd} />
       <div className="w-px h-6 bg-ink-600 mx-1" />
       <button
         onClick={undo}
@@ -122,6 +154,8 @@ export default function Toolbar({ onPlay, onToggleLibrary, libraryOpen, onOpenSa
         ↷ Redo
       </button>
       <div className="flex-1" />
+      <button onClick={onOpenSearch} className={btnGhost} title="Search nodes (Ctrl+K)">🔍 Search</button>
+      <TagFilter activeTags={activeTags} onChange={onChangeTags} />
       <button
         onClick={onToggleLibrary}
         className={libraryOpen ? btnPrimary : btn}
@@ -134,6 +168,7 @@ export default function Toolbar({ onPlay, onToggleLibrary, libraryOpen, onOpenSa
       <button onClick={onOpenSaves} className={btnGhost} title="Save / load projects in a folder">💾 Saves</button>
       <button onClick={handleImport} className={btnGhost}>Import</button>
       <button onClick={handleExport} className={btnGhost}>Export</button>
+      <button onClick={handleExportHtml} className={btnGhost} title="Export a standalone playable .html file">⬇ HTML</button>
       <button onClick={handleReset} className={btnGhost}>Clear</button>
       <button onClick={handleSave} className={btnPrimary} title="Save (Ctrl+S)">Save</button>
       <input ref={fileInputRef} type="file" accept=".json" onChange={handleFile} className="hidden" />
