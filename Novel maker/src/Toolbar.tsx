@@ -4,6 +4,7 @@ import { useFlowStore } from './store';
 import type { NodeKind } from './types';
 import TagFilter from './TagFilter';
 import FunctionMenu from './FunctionMenu';
+import FileMenu from './FileMenu';
 import { useCharacterStore } from './library/characterStore';
 import { buildStoryHtml } from './export/exportHtml';
 
@@ -48,7 +49,40 @@ export default function Toolbar({
     addNode(kind, { x: centerX - 130 + jitter(), y: centerY - 80 + jitter() });
   };
 
-  const handleExport = () => {
+  // ---- File menu actions ----
+  const handleNew = () => {
+    if (confirm('Start a new story? This clears the canvas (you can still Undo).')) reset();
+  };
+
+  const handleOpen = () => fileInputRef.current?.click();
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const ok = importJSON(String(ev.target?.result ?? ''));
+      if (!ok) alert('Invalid JSON file');
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleSave = () => {
+    saveLocal();
+    flashSaved();
+  };
+
+  const flashSaved = () => {
+    const btn = document.activeElement as HTMLElement | null;
+    if (btn && btn.tagName === 'BUTTON') {
+      const orig = btn.textContent;
+      btn.textContent = 'Saved ✓';
+      setTimeout(() => { if (btn) btn.textContent = orig; }, 1200);
+    }
+  };
+
+  const handleExportJson = () => {
     const json = exportJSON();
     const blob = new Blob([json], { type: 'application/json' });
     const a = document.createElement('a');
@@ -66,34 +100,6 @@ export default function Toolbar({
     a.href = URL.createObjectURL(blob);
     a.download = `my-story-${Date.now()}.html`;
     a.click();
-  };
-
-  const handleImport = () => fileInputRef.current?.click();
-
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const ok = importJSON(String(ev.target?.result ?? ''));
-      if (!ok) alert('Invalid JSON file');
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
-  const handleSave = () => {
-    saveLocal();
-    const btn = document.activeElement as HTMLElement | null;
-    if (btn) {
-      const orig = btn.textContent;
-      btn.textContent = 'Saved ✓';
-      setTimeout(() => { if (btn) btn.textContent = orig; }, 1200);
-    }
-  };
-
-  const handleReset = () => {
-    if (confirm('Clear the entire canvas? (You can still Undo this.)')) reset();
   };
 
   // Global keyboard shortcuts
@@ -132,7 +138,16 @@ export default function Toolbar({
 
   return (
     <div className="h-14 bg-ink-800 border-b border-ink-600 flex items-center px-4 gap-2 flex-shrink-0">
-      <h1 className="text-accent font-semibold mr-4">Novel Flow</h1>
+      <h1 className="text-accent font-semibold mr-2">Novel Flow</h1>
+      <FileMenu
+        onNew={handleNew}
+        onOpen={handleOpen}
+        onSave={handleSave}
+        onSaveAs={onOpenSaves}
+        onExportJson={handleExportJson}
+        onExportHtml={handleExportHtml}
+      />
+      <div className="w-px h-6 bg-ink-600 mx-1" />
       <button onClick={() => handleAdd('dialog')} className={btn}>+ Dialog</button>
       <button onClick={() => handleAdd('scene')} className={btn}>+ Scene</button>
       <FunctionMenu onAdd={handleAdd} />
@@ -164,13 +179,6 @@ export default function Toolbar({
         📚 Library
       </button>
       <button onClick={onPlay} className={btnPlay} title="Play through the story">▶ Run</button>
-      <div className="w-px h-6 bg-ink-600 mx-1" />
-      <button onClick={onOpenSaves} className={btnGhost} title="Save / load projects in a folder">💾 Saves</button>
-      <button onClick={handleImport} className={btnGhost}>Import</button>
-      <button onClick={handleExport} className={btnGhost}>Export</button>
-      <button onClick={handleExportHtml} className={btnGhost} title="Export a standalone playable .html file">⬇ HTML</button>
-      <button onClick={handleReset} className={btnGhost}>Clear</button>
-      <button onClick={handleSave} className={btnPrimary} title="Save (Ctrl+S)">Save</button>
       <input ref={fileInputRef} type="file" accept=".json" onChange={handleFile} className="hidden" />
     </div>
   );
