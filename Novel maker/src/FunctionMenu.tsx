@@ -11,6 +11,7 @@ const ITEMS: { kind: NodeKind; icon: string; label: string }[] = [
   { kind: 'chapter', icon: '📖', label: 'Start Chapter' },
   { kind: 'decision', icon: '🔀', label: 'Decision' },
   { kind: 'loop', icon: '🔁', label: 'Loop' },
+  { kind: 'portal', icon: '🌀', label: 'Go to Arc' },
 ];
 
 export default function FunctionMenu({ onAdd }: Props) {

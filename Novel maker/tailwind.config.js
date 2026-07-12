@@ -18,6 +18,7 @@ export default {
           start: '#44dd88',
           scene: '#a86aff',
           loop: '#2dd4bf',
+          portal: '#8b7bff',
         },
       },
     },

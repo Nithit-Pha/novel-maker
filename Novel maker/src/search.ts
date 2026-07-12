@@ -19,6 +19,8 @@ export function nodeIcon(node: FlowNode): string {
       return '🔁';
     case 'chapter':
       return '📖';
+    case 'portal':
+      return '🌀';
     default:
       return '•';
   }
@@ -40,8 +42,9 @@ export function nodeTitle(node: FlowNode): string {
     return truncate(d.background?.trim(), 60) || truncate(d.description?.trim(), 60) || 'Scene';
   }
   if (d.kind === 'loop') return truncate(d.title?.trim(), 60) || 'Loop';
-  // chapter
-  return truncate(d.name?.trim(), 60) || 'Chapter';
+  if (d.kind === 'chapter') return truncate(d.name?.trim(), 60) || 'Chapter';
+  // portal
+  return d.label?.trim() || 'Go to Arc';
 }
 
 /** A longer body string used for snippet display. */
@@ -51,7 +54,8 @@ export function nodeBody(node: FlowNode): string {
   if (d.kind === 'decision') return [d.prompt, ...(d.choices ?? [])].filter(Boolean).join(' · ');
   if (d.kind === 'scene') return d.description ?? '';
   if (d.kind === 'loop') return [d.title, ...(d.items ?? []).map((it) => it.label)].filter(Boolean).join(' · ');
-  return d.name ?? '';
+  if (d.kind === 'chapter') return d.name ?? '';
+  return d.label ?? '';
 }
 
 /** All searchable text for a node (title fields + body + tags), lower-cased. */
@@ -62,7 +66,8 @@ export function searchableText(node: FlowNode): string {
   else if (d.kind === 'decision') parts.push(d.prompt ?? '', ...(d.choices ?? []));
   else if (d.kind === 'scene') parts.push(d.background ?? '', d.description ?? '');
   else if (d.kind === 'loop') parts.push(d.title ?? '', ...(d.items ?? []).map((it) => it.label));
-  else parts.push(d.name ?? '');
+  else if (d.kind === 'chapter') parts.push(d.name ?? '');
+  else parts.push(d.label ?? '');
   parts.push(...(d.tags ?? []));
   return parts.join(' \n ').toLowerCase();
 }

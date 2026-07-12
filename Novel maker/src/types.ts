@@ -1,4 +1,4 @@
-export type NodeKind = 'chapter' | 'dialog' | 'decision' | 'scene' | 'loop';
+export type NodeKind = 'chapter' | 'dialog' | 'decision' | 'scene' | 'loop' | 'portal';
 
 // Fields shared by every node kind.
 // @xyflow/react v12 requires a node's `data` to be assignable to
@@ -47,4 +47,11 @@ export interface LoopData extends CommonNodeData {
   items: FlowItem[];
 }
 
-export type NodeData = ChapterData | DialogData | DecisionData | SceneData | LoopData;
+/** Jumps play to another Arc's start. Terminal within its own arc. */
+export interface PortalData extends CommonNodeData {
+  kind: 'portal';
+  targetArcId: string | null;
+  label?: string;
+}
+
+export type NodeData = ChapterData | DialogData | DecisionData | SceneData | LoopData | PortalData;

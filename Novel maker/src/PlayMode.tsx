@@ -1,64 +1,115 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Edge, Node } from '@xyflow/react';
-import type { NodeData, ChapterData, DialogData, DecisionData, SceneData, LoopData } from './types';
-import { findStart, nextNodeId, resolveArrival, type PlayState } from './engine';
+import type {
+  NodeData,
+  ChapterData,
+  DialogData,
+  DecisionData,
+  SceneData,
+  LoopData,
+  PortalData,
+} from './types';
+import type { Arc } from './project';
+import { findStart, nextNodeId, resolveArrival } from './engine';
 
 interface Props {
-  nodes: Node<NodeData>[];
-  edges: Edge[];
+  arcs: Arc[];
+  startArcId: string;
   onClose: () => void;
 }
 
-export default function PlayMode({ nodes, edges, onClose }: Props) {
-  const start = useMemo(() => findStart(nodes, edges), [nodes, edges]);
-  const nodeMap = useMemo(() => {
-    const m = new Map<string, Node<NodeData>>();
-    nodes.forEach((n) => m.set(n.id, n));
-    return m;
-  }, [nodes]);
+interface ArcView {
+  id: string;
+  name: string;
+  nodes: Node<NodeData>[];
+  edges: Edge[];
+  nodeMap: Map<string, Node<NodeData>>;
+}
 
-  const initial = useMemo<PlayState>(
-    () =>
-      start
-        ? resolveArrival(start.id, [], {}, edges, nodeMap)
-        : { currentId: null, callStack: [], progress: {} },
-    [start, edges, nodeMap]
-  );
+interface PlayState {
+  arcId: string;
+  currentId: string | null;
+  callStack: { hubId: string; itemId: string }[];
+  progress: Record<string, string[]>;
+}
+
+export default function PlayMode({ arcs, startArcId, onClose }: Props) {
+  const arcViews = useMemo(() => {
+    const m: Record<string, ArcView> = {};
+    for (const a of arcs) {
+      const nodeMap = new Map<string, Node<NodeData>>();
+      a.nodes.forEach((n) => nodeMap.set(n.id, n));
+      m[a.id] = { id: a.id, name: a.name, nodes: a.nodes, edges: a.edges, nodeMap };
+    }
+    return m;
+  }, [arcs]);
+
+  // Resolve loops within an arc, then hop portals across arcs.
+  const land = (
+    arcId: string,
+    rawId: string | null,
+    callStack: PlayState['callStack'],
+    progress: PlayState['progress']
+  ): PlayState => {
+    let aId = arcId;
+    let arc = arcViews[aId];
+    if (!arc) return { arcId, currentId: null, callStack, progress };
+    let r = resolveArrival(rawId, callStack, progress, arc.edges, arc.nodeMap);
+    let guard = 0;
+    while (r.currentId && guard++ < 100) {
+      const node = arc.nodeMap.get(r.currentId);
+      if (!node || node.type !== 'portal') break;
+      const target = (node.data as PortalData).targetArcId;
+      const tArc = target ? arcViews[target] : undefined;
+      if (!tArc) {
+        r = { ...r, currentId: null };
+        break;
+      }
+      aId = target as string;
+      arc = tArc;
+      const st = findStart(tArc.nodes, tArc.edges);
+      r = resolveArrival(st ? st.id : null, r.callStack, r.progress, tArc.edges, tArc.nodeMap);
+    }
+    return { arcId: aId, currentId: r.currentId, callStack: r.callStack, progress: r.progress };
+  };
+
+  const initial = useMemo<PlayState>(() => {
+    const arc = arcViews[startArcId] ?? Object.values(arcViews)[0];
+    if (!arc) return { arcId: startArcId, currentId: null, callStack: [], progress: {} };
+    const st = findStart(arc.nodes, arc.edges);
+    return land(arc.id, st ? st.id : null, [], {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arcViews, startArcId]);
 
   const [state, setState] = useState<PlayState>(initial);
   const [history, setHistory] = useState<PlayState[]>([]);
 
-  const { currentId, callStack, progress } = state;
-  const current = currentId ? nodeMap.get(currentId) : null;
+  const arc = arcViews[state.arcId];
+  const current = arc && state.currentId ? arc.nodeMap.get(state.currentId) : null;
 
   const pushHistory = () => setHistory((h) => [...h, state]);
 
-  // Navigate from the current node via an optional handle (dialog/scene next, decision choice).
   const goNext = (handleId?: string) => {
-    if (!currentId) return;
-    const target = nextNodeId(currentId, edges, handleId);
+    if (!arc || !state.currentId) return;
+    const target = nextNodeId(state.currentId, arc.edges, handleId);
     pushHistory();
-    if (target) {
-      setState(resolveArrival(target, callStack, progress, edges, nodeMap));
-    } else {
-      setState({ currentId: null, callStack, progress });
-    }
+    if (target) setState(land(state.arcId, target, state.callStack, state.progress));
+    else setState({ ...state, currentId: null });
   };
 
-  // Player picks an item inside a loop → enter that item's branch.
   const enterItem = (loopId: string, itemId: string) => {
-    const target = nextNodeId(loopId, edges, `item-${itemId}`);
-    if (!target) return; // unwired (button is disabled anyway)
+    if (!arc) return;
+    const target = nextNodeId(loopId, arc.edges, `item-${itemId}`);
+    if (!target) return;
     pushHistory();
-    const cs = [...callStack, { hubId: loopId, itemId }];
-    setState(resolveArrival(target, cs, progress, edges, nodeMap));
+    const cs = [...state.callStack, { hubId: loopId, itemId }];
+    setState(land(state.arcId, target, cs, state.progress));
   };
 
   const goBack = () => {
     if (history.length === 0) return;
-    const prev = history[history.length - 1];
+    setState(history[history.length - 1]);
     setHistory((h) => h.slice(0, -1));
-    setState(prev);
   };
 
   const restart = () => {
@@ -66,7 +117,6 @@ export default function PlayMode({ nodes, edges, onClose }: Props) {
     setHistory([]);
   };
 
-  // keyboard: Esc exit, ArrowLeft/Backspace back, ArrowRight/Space next (non-branching cards only)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -83,104 +133,68 @@ export default function PlayMode({ nodes, edges, onClose }: Props) {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentId, history.length]);
+  }, [state, history.length]);
 
-  const ended = currentId === null && history.length > 0;
-  const noStory = !start;
+  const ended = state.currentId === null && history.length > 0;
+  const noStory = !arc;
 
   return (
     <div className="fixed inset-0 z-[1000] bg-black/95 flex flex-col">
-      {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-3 border-b border-ink-600 bg-ink-900">
         <div className="flex items-center gap-3">
           <span className="text-accent font-semibold">▶ Playing</span>
           <span className="text-gray-500 text-sm">
-            {history.length + (ended ? 0 : 1)} {ended ? 'steps shown' : `of ${nodes.length}`}
+            {arc ? `${arc.name} · ` : ''}
+            {ended ? `${history.length} steps` : `step ${history.length + 1}`}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={restart}
-            className="text-gray-300 hover:text-white px-3 py-1.5 text-sm hover:bg-ink-700 rounded"
-          >
+          <button onClick={restart} className="text-gray-300 hover:text-white px-3 py-1.5 text-sm hover:bg-ink-700 rounded">
             Restart
           </button>
-          <button
-            onClick={onClose}
-            className="bg-ink-700 hover:bg-ink-600 text-white px-3 py-1.5 text-sm rounded"
-          >
+          <button onClick={onClose} className="bg-ink-700 hover:bg-ink-600 text-white px-3 py-1.5 text-sm rounded">
             Exit (Esc)
           </button>
         </div>
       </div>
 
-      {/* Stage */}
       <div className="flex-1 flex items-center justify-center px-6 py-8 overflow-auto">
         <div className="w-full max-w-2xl">
           {noStory && (
             <div className="text-center text-gray-400">
               <h2 className="text-xl mb-2">No story to play</h2>
-              <p>Add at least one node to your canvas, then try Run again.</p>
+              <p>Add at least one node, then try Run again.</p>
             </div>
           )}
 
-          {ended && (
+          {(ended || (arc && !current)) && !noStory && (
             <div className="text-center">
               <h2 className="text-3xl font-light text-gray-300 mb-3 tracking-wider">— THE END —</h2>
-              <p className="text-gray-500 mb-6">You reached a node with no outgoing connection.</p>
-              <button
-                onClick={restart}
-                className="bg-accent hover:bg-accent/90 text-white px-5 py-2 rounded"
-              >
+              <p className="text-gray-500 mb-6">You reached the end of the story.</p>
+              <button onClick={restart} className="bg-accent hover:bg-accent/90 text-white px-5 py-2 rounded">
                 Play again
               </button>
             </div>
           )}
 
           {current && current.type === 'chapter' && (
-            <ChapterCard
-              data={current.data as ChapterData}
-              onNext={() => goNext()}
-              hasNext={!!nextNodeId(current.id, edges)}
-            />
+            <ChapterCard data={current.data as ChapterData} onNext={() => goNext()} hasNext={!!nextNodeId(current.id, arc!.edges)} />
           )}
-
           {current && current.type === 'scene' && (
-            <SceneCard
-              data={current.data as SceneData}
-              onNext={() => goNext()}
-              hasNext={!!nextNodeId(current.id, edges)}
-            />
+            <SceneCard data={current.data as SceneData} onNext={() => goNext()} hasNext={!!nextNodeId(current.id, arc!.edges)} />
           )}
-
           {current && current.type === 'dialog' && (
-            <DialogCard
-              data={current.data as DialogData}
-              onNext={() => goNext()}
-              hasNext={!!nextNodeId(current.id, edges)}
-            />
+            <DialogCard data={current.data as DialogData} onNext={() => goNext()} hasNext={!!nextNodeId(current.id, arc!.edges)} />
           )}
-
           {current && current.type === 'decision' && (
-            <DecisionCard
-              data={current.data as DecisionData}
-              edges={edges.filter((e) => e.source === current.id)}
-              onChoose={(idx) => goNext(`choice-${idx}`)}
-            />
+            <DecisionCard data={current.data as DecisionData} edges={arc!.edges.filter((e) => e.source === current.id)} onChoose={(idx) => goNext(`choice-${idx}`)} />
           )}
-
           {current && current.type === 'loop' && (
-            <LoopCard
-              data={current.data as LoopData}
-              done={progress[current.id] ?? []}
-              edges={edges.filter((e) => e.source === current.id)}
-              onPick={(itemId) => enterItem(current.id, itemId)}
-            />
+            <LoopCard data={current.data as LoopData} done={state.progress[current.id] ?? []} edges={arc!.edges.filter((e) => e.source === current.id)} onPick={(itemId) => enterItem(current.id, itemId)} />
           )}
         </div>
       </div>
 
-      {/* Bottom navigation */}
       <div className="flex items-center justify-between px-6 py-3 border-t border-ink-600 bg-ink-900 text-xs text-gray-500">
         <button
           onClick={goBack}
@@ -209,11 +223,8 @@ function ChapterCard({ data, onNext, hasNext }: { data: ChapterData; onNext: () 
       <h2 className="text-4xl text-white font-light mb-10">
         {data.name || <span className="text-gray-600">(untitled chapter)</span>}
       </h2>
-      <button
-        onClick={onNext}
-        className="bg-accent-start hover:bg-green-500 text-ink-900 font-semibold px-6 py-2.5 rounded"
-      >
-        {hasNext ? 'Begin \u2192' : 'The End'}
+      <button onClick={onNext} className="bg-accent-start hover:bg-green-500 text-ink-900 font-semibold px-6 py-2.5 rounded">
+        {hasNext ? 'Begin →' : 'The End'}
       </button>
     </div>
   );
@@ -222,16 +233,11 @@ function ChapterCard({ data, onNext, hasNext }: { data: ChapterData; onNext: () 
 function SceneCard({ data, onNext, hasNext }: { data: SceneData; onNext: () => void; hasNext: boolean }) {
   return (
     <div className="animate-fade-in">
-      <div className="text-accent-scene text-xs font-semibold uppercase tracking-[0.3em] mb-3">
-        🎬 {data.background || 'Scene'}
-      </div>
+      <div className="text-accent-scene text-xs font-semibold uppercase tracking-[0.3em] mb-3">🎬 {data.background || 'Scene'}</div>
       <p className="text-2xl text-gray-200 leading-relaxed font-light mb-10 italic">
         {data.description || <span className="text-gray-600">(no description)</span>}
       </p>
-      <button
-        onClick={onNext}
-        className="bg-accent-scene hover:bg-purple-500 text-white px-6 py-2.5 rounded"
-      >
+      <button onClick={onNext} className="bg-accent-scene hover:bg-purple-500 text-white px-6 py-2.5 rounded">
         {hasNext ? 'Next →' : 'The End'}
       </button>
     </div>
@@ -241,36 +247,21 @@ function SceneCard({ data, onNext, hasNext }: { data: SceneData; onNext: () => v
 function DialogCard({ data, onNext, hasNext }: { data: DialogData; onNext: () => void; hasNext: boolean }) {
   return (
     <div className="animate-fade-in">
-      <div className="text-accent-dialog text-xs font-semibold uppercase tracking-[0.3em] mb-3">
-        💬 {data.character || 'Dialog'}
-      </div>
+      <div className="text-accent-dialog text-xs font-semibold uppercase tracking-[0.3em] mb-3">💬 {data.character || 'Dialog'}</div>
       <p className="text-2xl text-gray-100 leading-relaxed font-light mb-10">
         {data.text ? `"${data.text}"` : <span className="text-gray-600">(no dialog text)</span>}
       </p>
-      <button
-        onClick={onNext}
-        className="bg-accent-dialog hover:bg-blue-500 text-white px-6 py-2.5 rounded"
-      >
+      <button onClick={onNext} className="bg-accent-dialog hover:bg-blue-500 text-white px-6 py-2.5 rounded">
         {hasNext ? 'Next →' : 'The End'}
       </button>
     </div>
   );
 }
 
-function DecisionCard({
-  data,
-  edges,
-  onChoose,
-}: {
-  data: DecisionData;
-  edges: Edge[];
-  onChoose: (idx: number) => void;
-}) {
+function DecisionCard({ data, edges, onChoose }: { data: DecisionData; edges: Edge[]; onChoose: (idx: number) => void }) {
   return (
     <div className="animate-fade-in">
-      <div className="text-accent-decision text-xs font-semibold uppercase tracking-[0.3em] mb-3">
-        🔀 Decision
-      </div>
+      <div className="text-accent-decision text-xs font-semibold uppercase tracking-[0.3em] mb-3">🔀 Decision</div>
       <p className="text-2xl text-gray-100 leading-relaxed font-light mb-8">
         {data.prompt || <span className="text-gray-600">(no prompt)</span>}
       </p>
@@ -285,9 +276,7 @@ function DecisionCard({
             >
               <span className="text-accent-decision mr-3 font-semibold">{idx + 1}.</span>
               <span className="text-lg">{choice || <span className="text-gray-500 italic">(empty choice)</span>}</span>
-              {!wired && (
-                <span className="ml-3 text-xs text-gray-500 group-hover:text-yellow-500">(unconnected)</span>
-              )}
+              {!wired && <span className="ml-3 text-xs text-gray-500 group-hover:text-yellow-500">(unconnected)</span>}
             </button>
           );
         })}
@@ -296,26 +285,14 @@ function DecisionCard({
   );
 }
 
-function LoopCard({
-  data,
-  done,
-  edges,
-  onPick,
-}: {
-  data: LoopData;
-  done: string[];
-  edges: Edge[];
-  onPick: (itemId: string) => void;
-}) {
+function LoopCard({ data, done, edges, onPick }: { data: LoopData; done: string[]; edges: Edge[]; onPick: (itemId: string) => void }) {
   const total = data.items.length;
   const completed = data.items.filter((it) => done.includes(it.id)).length;
   return (
     <div className="animate-fade-in">
       <div className="text-accent-loop text-xs font-semibold uppercase tracking-[0.3em] mb-3 flex items-center gap-3">
         🔁 Loop
-        <span className="text-gray-500 normal-case tracking-normal">
-          {completed} / {total} done
-        </span>
+        <span className="text-gray-500 normal-case tracking-normal">{completed} / {total} done</span>
       </div>
       <p className="text-2xl text-gray-100 leading-relaxed font-light mb-8">
         {data.title || <span className="text-gray-600">(complete every item to continue)</span>}
@@ -336,12 +313,8 @@ function LoopCard({
               }`}
             >
               <span className="text-accent-loop mr-3 font-semibold">{isDone ? '✓' : '○'}</span>
-              <span className="text-lg">
-                {item.label || <span className="text-gray-500 italic">(unnamed item)</span>}
-              </span>
-              {!wired && (
-                <span className="ml-3 text-xs text-gray-500 group-hover:text-yellow-500">(unconnected)</span>
-              )}
+              <span className="text-lg">{item.label || <span className="text-gray-500 italic">(unnamed item)</span>}</span>
+              {!wired && <span className="ml-3 text-xs text-gray-500 group-hover:text-yellow-500">(unconnected)</span>}
             </button>
           );
         })}

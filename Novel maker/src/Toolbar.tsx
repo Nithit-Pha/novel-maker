@@ -92,9 +92,14 @@ export default function Toolbar({
   };
 
   const handleExportHtml = () => {
-    const { nodes, edges } = useFlowStore.getState();
+    const project = useFlowStore.getState().getProject();
     const characters = useCharacterStore.getState().characters;
-    const html = buildStoryHtml({ nodes, edges, characters, title: 'My Story' });
+    const html = buildStoryHtml({
+      arcs: project.arcs,
+      startArcId: project.activeArcId,
+      characters,
+      title: project.meta.title,
+    });
     const blob = new Blob([html], { type: 'text/html' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

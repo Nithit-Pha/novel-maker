@@ -9,12 +9,15 @@ import {
   type NodeTypes,
 } from '@xyflow/react';
 import { useFlowStore } from './store';
+import type { Arc } from './project';
 import ChapterNode from './nodes/ChapterNode';
 import DialogNode from './nodes/DialogNode';
 import DecisionNode from './nodes/DecisionNode';
 import SceneNode from './nodes/SceneNode';
 import LoopNode from './nodes/LoopNode';
+import PortalNode from './nodes/PortalNode';
 import Toolbar from './Toolbar';
+import ArcTabs from './ArcTabs';
 import PlayMode from './PlayMode';
 import LibraryPanel from './library/LibraryPanel';
 import SavesPanel from './library/SavesPanel';
@@ -27,18 +30,21 @@ const nodeTypes: NodeTypes = {
   decision: DecisionNode,
   scene: SceneNode,
   loop: LoopNode,
+  portal: PortalNode,
 };
 
 function FlowCanvas() {
   const nodes = useFlowStore((s) => s.nodes);
   const edges = useFlowStore((s) => s.edges);
+  const activeArcId = useFlowStore((s) => s.activeArcId);
   const onNodesChange = useFlowStore((s) => s.onNodesChange);
   const onEdgesChange = useFlowStore((s) => s.onEdgesChange);
   const onConnect = useFlowStore((s) => s.onConnect);
   const commitDrag = useFlowStore((s) => s.commitDrag);
   const loadLocal = useFlowStore((s) => s.loadLocal);
+  const getProject = useFlowStore((s) => s.getProject);
 
-  const [playing, setPlaying] = useState(false);
+  const [play, setPlay] = useState<{ arcs: Arc[]; startArcId: string } | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [savesOpen, setSavesOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -47,6 +53,11 @@ function FlowCanvas() {
   useEffect(() => {
     loadLocal();
   }, [loadLocal]);
+
+  const startPlay = () => {
+    const project = getProject();
+    setPlay({ arcs: project.arcs, startArcId: project.activeArcId });
+  };
 
   // Dim nodes that don't match the active tag filter (view-only; not persisted).
   const displayNodes = useMemo(() => {
@@ -59,7 +70,7 @@ function FlowCanvas() {
   return (
     <div className="h-screen w-screen flex flex-col">
       <Toolbar
-        onPlay={() => setPlaying(true)}
+        onPlay={startPlay}
         onToggleLibrary={() => setLibraryOpen((v) => !v)}
         libraryOpen={libraryOpen}
         onOpenSaves={() => setSavesOpen(true)}
@@ -67,8 +78,10 @@ function FlowCanvas() {
         activeTags={activeTags}
         onChangeTags={setActiveTags}
       />
+      <ArcTabs />
       <div className="flex-1 relative">
         <ReactFlow
+          key={activeArcId}
           nodes={displayNodes}
           edges={edges}
           onNodesChange={onNodesChange}
@@ -89,6 +102,7 @@ function FlowCanvas() {
               if (n.type === 'decision') return '#ffaa44';
               if (n.type === 'scene') return '#a86aff';
               if (n.type === 'loop') return '#2dd4bf';
+              if (n.type === 'portal') return '#8b7bff';
               if (n.type === 'chapter') return '#44dd88';
               return '#44dd88';
             }}
@@ -99,8 +113,8 @@ function FlowCanvas() {
         {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} />}
       </div>
       {savesOpen && <SavesPanel onClose={() => setSavesOpen(false)} />}
-      {playing && (
-        <PlayMode nodes={nodes} edges={edges} onClose={() => setPlaying(false)} />
+      {play && (
+        <PlayMode arcs={play.arcs} startArcId={play.startArcId} onClose={() => setPlay(null)} />
       )}
     </div>
   );

@@ -236,3 +236,87 @@ Top priority. See D1 for implementation.
 | 3 — Editor QoL (~3 days) | F2 search, F3 validation panel, F9 edge labels, F7 play-from-node, P1 NodeShell, P4 | Daily usability |
 | 4 — Strategic (~2 weeks) | P2 stable choice IDs, F4 variables/conditions, F5 End+Note nodes, F6 exports | Real IF tool |
 | 5 — Scale (~1 week) | D2 IndexedDB, F8 multi-project, F10 auto-layout, A5 if needed | Growth |
+
+---
+
+# Arc / multi-page design (approved 2026-06-29)
+
+Split a story into multiple **Arc** pages, each its own canvas. Locked decisions: label = **Arc**; arcs link via **portal nodes**; **per-arc** undo/redo history; **tab strip** UI under the toolbar. The character/scene Library stays global (shared across all arcs).
+
+Hierarchy: **Story (project) → Arc (page) → Chapter (node) → Scene / Dialog / Decision / Loop.** The existing Chapter node stays as the entry marker *inside* an arc.
+
+## 1. Data model — `src/types.ts` (+ new project types)
+```ts
+interface Arc {
+  id: string;
+  name: string;
+  color?: string;               // optional per-arc accent (minimap/tab)
+  nodes: Node<NodeData>[];
+  edges: Edge[];
+}
+interface Project {
+  version: 2;                   // bump; migrate v1 (single graph) -> one Arc
+  meta: { title: string };
+  arcs: Arc[];
+  activeArcId: string;
+}
+```
+New node kind **`portal`** (`GotoData`): `{ kind: 'portal'; targetArcId: string | null; label?: string }`. Add `'portal'` to `NodeKind` and `NodeData`; extend `search.ts` (icon 🌀, title = "→ <arc name>").
+
+## 2. Persistence & migration — `src/store.ts`
+- localStorage key bumps to `novel-flow-v2` (keep reading `novel-flow-v1`).
+- `migrate(raw)`: v1 `{ nodes, edges }` → `{ version:2, meta, arcs:[{ id, name:'Arc 1', nodes, edges }], activeArcId }`. Also run the existing legacy `start`→`chapter` node fix per arc.
+- Folder Saves (`savesFs.ts` / `SavesPanel`): `story/story.json` now holds the whole `Project` (arcs array). Loader detects old shape and migrates. `characters/characters.json` unchanged.
+- JSON Export/Import (File menu) carry the full `Project`.
+
+## 3. Store changes — `src/store.ts`
+Keep the public API (`nodes`, `edges`, `addNode`, `onNodesChange`, `undo`, …) operating on the **active arc**, so existing components/nodes need no change. Internally:
+- State: `arcs: Arc[]`, `activeArcId`, and **per-arc history**: `histories: Record<arcId, { past: Snapshot[]; future: Snapshot[] }>`.
+- Derived getters read/write `arcs.find(a => a.id === activeArcId)`. `pushHistory`/`undo`/`redo` target the active arc's history bucket.
+- New actions: `addArc()`, `renameArc(id, name)`, `deleteArc(id)` (block deleting the last arc), `duplicateArc(id)`, `reorderArcs(from, to)`, `setActiveArc(id)`, `listArcs()`.
+- `saveLocal`/`exportJSON`/`importJSON`/`loadLocal`/`reset` operate on the whole Project.
+
+## 4. Tab strip — new `src/ArcTabs.tsx`
+A horizontal strip rendered between `Toolbar` and the canvas in `App.tsx`:
+- One tab per arc: `[ Arc 1 ] [ Arc 2 ] … [ + ]`. Click = `setActiveArc`; double-click = inline rename; drag = `reorderArcs`; ⋯/right-click menu = rename / duplicate / delete.
+- Overflow: when tabs exceed the width, collapse extras into a "»" dropdown (so it scales past ~8 arcs).
+- Active tab highlighted with the accent; shows a breadcrumb `Story ▸ <arc>` at the left.
+- Switching arcs remounts the canvas (`key={activeArcId}`) so React Flow re-fits the new graph.
+
+## 5. Portal node — new `src/nodes/PortalNode.tsx` + Function menu
+- Card (distinct color, e.g. indigo `#8b7bff`): a **target-arc dropdown** (lists other arcs by name) + optional label. One target handle `in`; it is terminal (no `out`).
+- Add to `FunctionMenu` as **🌀 Go to Arc**; register in `nodeTypes`; minimap color; `store.defaultData('portal')`.
+- Editing the dropdown reads `listArcs()` from the store.
+
+## 6. Play across arcs — `src/engine.ts` + `src/PlayMode.tsx`
+- PlayMode receives the **whole Project** (all arcs), not just one graph. Play state gains `arcId`; `nodeMap`/`edges` are derived from the current arc.
+- On reaching a **portal** node: jump to `findStart(targetArc)` and continue (`resolveArrival` in the new arc). Guard against missing/empty targets → treat as THE END.
+- **Back** already snapshots play-state; include `arcId` so stepping back can cross an arc boundary.
+- Run options: **Play this Arc** (start = active arc) vs **Play whole Story** (start = the project's first arc). Portals bridge arcs either way.
+
+## 7. HTML export across arcs — `src/export/exportHtml.ts`
+- Embed all arcs: `STORY = { title, arcs:[{id,name,nodes,edges}], startArcId, characters }`.
+- The inlined player keeps a current-arc pointer; `findStart`/`nextId`/`resolve` operate on the current arc's nodes/edges; a portal switches `arcId` and resolves the target arc's start. Back snapshots include `arcId`. No new deps.
+
+## 8. Other touchpoints
+- **Search palette**: search across *all* arcs; each result shows its arc name; selecting a result in another arc switches arcs first, then centers. (Cheap once nodes carry their arc in the search index.)
+- **Tag filter / pins**: operate on the active arc (document them as per-arc), or optionally aggregate — start with active-arc only.
+- **Minimap**: unchanged (shows active arc). Portal nodes get their own color.
+
+## 9. Files
+- New: `src/ArcTabs.tsx`, `src/nodes/PortalNode.tsx`, (optional) `src/project.ts` for Project/Arc types + `migrate()`.
+- Edited: `src/types.ts`, `src/store.ts` (multi-arc + per-arc history + migration), `src/App.tsx` (render ArcTabs, `key` the canvas), `src/FunctionMenu.tsx` (Go to Arc), `src/engine.ts` (arc-aware helpers), `src/PlayMode.tsx` (cross-arc play), `src/export/exportHtml.ts` (bundle arcs), `src/search.ts` (portal + arc-tagged results), `src/library/savesFs.ts`/`SavesPanel.tsx` (Project payload), `tailwind.config.js` (portal color).
+
+## 10. Build order
+1. **Project/Arc data + store refactor + migration** (single arc still works; nothing visible yet). Verify old saves load as "Arc 1".
+2. **Arc tab strip**: add/switch/rename/delete/reorder + per-arc history. Ships "many pages of Arc."
+3. **Portal node** + cross-arc **play** (`PlayMode`) + Run "this Arc / whole Story".
+4. **HTML export** across arcs.
+5. **Search across arcs**; polish (duplicate arc, per-arc color, overflow dropdown).
+6. `tsc -b` clean + playthrough test (two arcs linked by a portal, Back across the boundary, export plays end-to-end).
+
+## 11. Edge cases / decisions
+- Deleting an arc that portals point to → those portals show "(missing target)"; treat as THE END in play. Offer confirm on delete if referenced.
+- Can't delete the last remaining arc.
+- Undo is per-arc: switching arcs doesn't clear another arc's history; deleting an arc drops its history bucket.
+- New nodes still drop into the center of the *active* arc's viewport.
