@@ -16,7 +16,16 @@ npm run dev
 
 Open http://localhost:5173. The app launches with a demo story so you can see the flow immediately.
 
-Windows users can also just double-click `install-and-run.bat`.
+### Windows: just double-click
+
+You don't need a terminal. Double-click one of these in this folder:
+
+- **`Open Novel Flow.vbs`** — recommended. Starts the app with **no console window** and opens your browser automatically when it's ready. On the very first run it shows a small popup while it installs dependencies (1–2 minutes); after that it opens in a few seconds.
+- **`Open Novel Flow.bat`** — same thing via a `.bat` (a console window flashes briefly, then closes). It simply launches the `.vbs`.
+- **`Stop Novel Flow.bat`** — stops the running dev server (only the process on port 5173, so it won't touch other Node apps). You can also just close the browser tab and stop it later.
+- **`install-and-run.bat`** — the original launcher that keeps a visible console open (useful if you want to see server logs or errors).
+
+All of these require [Node.js 18+](https://nodejs.org); the launcher will prompt you if it's missing.
 
 ## Build for production
 
