@@ -60,3 +60,6 @@ vite.config.ts.timestamp-*
 
 # npm pack output
 *.tgz
+
+# Your projects (Novel Flow saves folder) — remove this line to version them with git
+saves/

@@ -12,6 +12,9 @@ const ITEMS: { kind: NodeKind; icon: string; label: string }[] = [
   { kind: 'decision', icon: '🔀', label: 'Decision' },
   { kind: 'loop', icon: '🔁', label: 'Loop' },
   { kind: 'portal', icon: '🌀', label: 'Go to Arc' },
+  { kind: 'condition', icon: '🧭', label: 'Condition' },
+  { kind: 'chance', icon: '🎲', label: 'Chance' },
+  { kind: 'end', icon: '🏁', label: 'Ending' },
 ];
 
 export default function FunctionMenu({ onAdd }: Props) {

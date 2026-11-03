@@ -4,65 +4,366 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
+/* ==========================================================================
+   Novel Flow — Literary Studio design tokens
+   Colors are RGB triplets so Tailwind opacity modifiers work: rgb(var(--x) / .5)
+   Light = warm paper, Dark = warm charcoal ("dark academia").
+   Contrast: every text token is >= 4.5:1 on --surface in both themes
+   (except --faint, used for placeholders and hints).
+   ========================================================================== */
+:root,
+:root[data-theme='light'] {
+  --bg: 244 240 232;
+  --surface: 255 252 246;
+  --sunken: 249 245 238;
+  --surface-2: 238 233 223;
+  --border: 224 216 203;
+  --border-strong: 207 197 181;
+  --fg: 57 53 47;
+  --fg-soft: 78 72 64;
+  --muted: 111 103 93;
+  --faint: 154 145 132;
+  --accent: 160 103 74;
+  --on-accent: 255 252 246;
+  --success: 95 122 99;
+  --warning: 154 115 55;
+  --danger: 168 91 83;
+  --edge: 189 178 161;
+  --grid: 205 195 178;
+  --shade: 107 85 55;
+  --n-start: 86 120 90;
+  --n-dialog: 79 107 140;
+  --n-decision: 162 97 46;
+  --n-scene: 122 90 133;
+  --n-loop: 74 122 116;
+  --n-portal: 94 95 150;
+  --n-condition: 156 90 107;
+  --n-chance: 134 105 42;
+  --n-end: 110 103 93;
+  --shadow-sm: 0 1px 2px rgb(var(--shade) / 0.06), 0 1px 1px rgb(var(--shade) / 0.04);
+  --shadow-md: 0 1px 3px rgb(var(--shade) / 0.08), 0 8px 22px -10px rgb(var(--shade) / 0.22);
+  --shadow-lg: 0 3px 10px rgb(var(--shade) / 0.1), 0 18px 40px -14px rgb(var(--shade) / 0.3);
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  --bg: 36 35 31;
+  --surface: 48 45 39;
+  --sunken: 42 40 35;
+  --surface-2: 57 53 46;
+  --border: 73 66 56;
+  --border-strong: 92 84 72;
+  --fg: 234 226 213;
+  --fg-soft: 214 205 191;
+  --muted: 170 160 146;
+  --faint: 138 129 116;
+  --accent: 193 139 104;
+  --on-accent: 36 35 31;
+  --success: 145 166 140;
+  --warning: 208 170 109;
+  --danger: 207 138 128;
+  --edge: 110 100 87;
+  --grid: 66 61 52;
+  --shade: 0 0 0;
+  --n-start: 147 174 143;
+  --n-dialog: 143 168 198;
+  --n-decision: 211 155 99;
+  --n-scene: 183 157 195;
+  --n-loop: 135 181 174;
+  --n-portal: 163 164 208;
+  --n-condition: 212 157 170;
+  --n-chance: 210 178 106;
+  --n-end: 185 177 164;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.25);
+  --shadow-md: 0 1px 3px rgb(0 0 0 / 0.3), 0 10px 26px -12px rgb(0 0 0 / 0.6);
+  --shadow-lg: 0 3px 12px rgb(0 0 0 / 0.32), 0 20px 44px -14px rgb(0 0 0 / 0.65);
+  color-scheme: dark;
+}
+
+/* Per-node accent: each node card sets --node to one of the --n-* tokens */
+.nf-kind-chapter { --node: var(--n-start); }
+.nf-kind-dialog { --node: var(--n-dialog); }
+.nf-kind-decision { --node: var(--n-decision); }
+.nf-kind-scene { --node: var(--n-scene); }
+.nf-kind-loop { --node: var(--n-loop); }
+.nf-kind-portal { --node: var(--n-portal); }
+.nf-kind-condition { --node: var(--n-condition); }
+.nf-kind-chance { --node: var(--n-chance); }
+.nf-kind-end { --node: var(--n-end); }
+
+html,
+body,
+#root {
   height: 100%;
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 body {
-  background: #0f1929;
-  color: #eee;
+  background: rgb(var(--bg));
+  color: rgb(var(--fg));
+  font-family: 'DM Sans', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* React Flow theme overrides */
+/* Smooth theme switching (colors only; never layout or transforms) */
+.nf-theme-anim,
+.nf-theme-anim * {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.2s ease, fill 0.25s ease,
+    stroke 0.25s ease !important;
+}
+
+::placeholder {
+  color: rgb(var(--faint));
+  opacity: 1;
+}
+::selection {
+  background: rgb(var(--accent) / 0.25);
+}
+
+/* Soft focus ring for every control */
+:where(input, textarea, select, button, a, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--accent) / 0.3);
+}
+:where(input, textarea, select):focus {
+  outline: none;
+  border-color: rgb(var(--accent) / 0.7);
+}
+select {
+  cursor: pointer;
+}
+
+/* Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--border-strong)) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--border-strong));
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Paper grain (very subtle, no images) */
+.nf-paper {
+  background-color: rgb(var(--bg));
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .42 0 0 0 0 .34 0 0 0 0 .22 0 0 0 .10 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+:root[data-theme='dark'] .nf-paper {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .92 0 0 0 0 .85 0 0 0 0 .72 0 0 0 .045 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ==========================================================================
+   Shared components
+   ========================================================================== */
+@layer components {
+  .nf-btn {
+    @apply inline-flex items-center justify-center gap-1.5 h-8 px-2.5 rounded-lg text-[13px] font-medium text-fg-soft
+      border border-transparent transition-colors whitespace-nowrap select-none;
+  }
+  .nf-btn:hover:not(:disabled) {
+    @apply bg-surface-2 text-fg;
+  }
+  .nf-btn:disabled {
+    @apply opacity-40 cursor-not-allowed;
+  }
+  .nf-btn-outline {
+    @apply border-border bg-surface;
+    box-shadow: var(--shadow-sm);
+  }
+  .nf-btn-outline:hover:not(:disabled) {
+    @apply border-border-strong;
+  }
+  .nf-btn-primary {
+    @apply bg-accent text-on-accent border-accent;
+    box-shadow: var(--shadow-sm);
+  }
+  .nf-btn-primary:hover:not(:disabled) {
+    @apply bg-accent text-on-accent brightness-110;
+  }
+  .nf-btn-active {
+    @apply bg-accent/15 text-accent border-accent/30;
+  }
+  .nf-icon-btn {
+    @apply inline-flex items-center justify-center w-8 h-8 rounded-lg text-muted transition-colors flex-shrink-0;
+  }
+  .nf-icon-btn:hover:not(:disabled) {
+    @apply bg-surface-2 text-fg;
+  }
+  .nf-icon-btn:disabled {
+    @apply opacity-40 cursor-not-allowed;
+  }
+  .nf-menu {
+    @apply bg-surface border border-border rounded-xl p-1 z-50;
+    box-shadow: var(--shadow-lg);
+  }
+  .nf-menu-item {
+    @apply w-full flex items-center gap-2.5 text-left text-[13px] text-fg-soft rounded-lg px-2.5 py-1.5 transition-colors;
+  }
+  .nf-menu-item:hover:not(:disabled) {
+    @apply bg-surface-2 text-fg;
+  }
+  .nf-menu-item:disabled {
+    @apply opacity-40 cursor-not-allowed;
+  }
+  .nf-menu-sep {
+    @apply my-1 h-px bg-border;
+  }
+  .nf-input {
+    @apply bg-sunken border border-border text-fg rounded-lg px-2.5 py-1.5 text-sm transition-colors;
+  }
+  .nf-panel {
+    @apply bg-surface border border-border rounded-2xl;
+    box-shadow: var(--shadow-lg);
+  }
+  .nf-kbd {
+    @apply inline-flex items-center px-1.5 h-5 rounded border border-border bg-sunken text-[11px] font-mono text-muted;
+  }
+}
+
+/* ==========================================================================
+   Node cards (all node types share this frame)
+   ========================================================================== */
+.nf-node {
+  background: rgb(var(--surface));
+  border: 1.5px solid rgb(var(--node) / 0.5);
+  border-radius: 14px;
+  box-shadow: var(--shadow-md);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.nf-node:hover {
+  border-color: rgb(var(--node) / 0.8);
+  box-shadow: var(--shadow-lg);
+}
+.nf-node.is-selected {
+  border-color: rgb(var(--node));
+  box-shadow: 0 0 0 3px rgb(var(--node) / 0.22), var(--shadow-lg);
+}
+.nf-node-header {
+  background: rgb(var(--node) / 0.1);
+  border-bottom: 1px solid rgb(var(--node) / 0.2);
+  border-radius: 12.5px 12.5px 0 0;
+}
+.nf-node-label {
+  color: rgb(var(--node));
+}
+.nf-node label {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: rgb(var(--muted));
+}
+.nf-node :where(input, textarea, select) {
+  border-radius: 8px;
+  font-size: 13px;
+}
+.nf-node :where(input, textarea, select):focus {
+  border-color: rgb(var(--node) / 0.75);
+  box-shadow: 0 0 0 3px rgb(var(--node) / 0.18);
+}
+.font-story {
+  font-family: 'Lora', Georgia, 'Times New Roman', serif;
+}
+.nf-node textarea.font-story,
+.nf-node input.font-story {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ==========================================================================
+   React Flow — canvas, wires, handles, minimap
+   ========================================================================== */
 .react-flow {
-  background: #0f1929;
+  background: transparent;
 }
 .react-flow__background {
-  background-color: #0f1929;
-}
-.react-flow__controls {
-  background: #16213e !important;
-  border: 1px solid #2a3a5e !important;
-  border-radius: 8px;
-  overflow: hidden;
-}
-.react-flow__controls button {
-  background: #16213e !important;
-  border-bottom: 1px solid #2a3a5e !important;
-  color: #eee !important;
-  fill: #eee !important;
-}
-.react-flow__controls button:hover {
-  background: #1a2845 !important;
+  background-color: transparent;
 }
 .react-flow__minimap {
-  background: #16213e !important;
-  border: 1px solid #2a3a5e !important;
-  border-radius: 8px;
+  background: rgb(var(--surface)) !important;
+  border: 1px solid rgb(var(--border));
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
 }
+.react-flow__minimap-mask {
+  fill: rgb(var(--bg) / 0.7);
+}
+
+/* Wires: color is set per edge via --edge-color (the source node's accent) */
 .react-flow__edge-path {
-  stroke: #6a8eff;
+  stroke: rgb(var(--edge-color, var(--edge)) / 0.75);
   stroke-width: 2;
+  transition: stroke-width 0.12s ease, stroke 0.12s ease, opacity 0.12s ease;
 }
-.react-flow__edge.selected .react-flow__edge-path,
 .react-flow__edge:hover .react-flow__edge-path {
-  stroke: #e94560;
+  stroke: rgb(var(--edge-color, var(--accent)));
   stroke-width: 3;
 }
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge.nf-edge-hot .react-flow__edge-path {
+  stroke: rgb(var(--accent));
+  stroke-width: 3.25;
+}
+.nf-has-hot .react-flow__edge:not(.nf-edge-hot) .react-flow__edge-path {
+  opacity: 0.3;
+}
+.react-flow__connectionline path,
+.react-flow__connection-path {
+  stroke: rgb(var(--accent));
+  stroke-width: 2;
+  stroke-dasharray: 6 5;
+}
+
 .react-flow__handle {
   width: 12px;
   height: 12px;
-  background: #6a8eff;
-  border: 2px solid #16213e;
+  background: rgb(var(--surface));
+  border: 2px solid rgb(var(--node, var(--accent)) / 0.85);
+  transition: background 0.12s ease, box-shadow 0.12s ease;
 }
-.react-flow__handle:hover {
-  background: #e94560;
+.react-flow__handle:hover,
+.react-flow__handle.connectingfrom,
+.react-flow__handle.connectingto,
+.react-flow__handle-valid {
+  background: rgb(var(--node, var(--accent)));
+  box-shadow: 0 0 0 4px rgb(var(--node, var(--accent)) / 0.2);
 }
+/* Numbered handles (choices, branches, outcomes) */
+.react-flow__handle.nf-num-handle {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 600 9.5px/1 'DM Sans', sans-serif;
+  color: rgb(var(--node));
+  pointer-events: all;
+}
+.react-flow__handle.nf-num-handle:hover,
+.react-flow__handle.nf-num-handle.nf-hot {
+  color: rgb(var(--surface));
+  background: rgb(var(--node));
+}
+
 .react-flow__attribution {
   background: transparent !important;
-  color: #4a5a7a !important;
+  color: rgb(var(--faint)) !important;
+  font-size: 10px;
+}
+.react-flow__attribution a {
+  color: inherit !important;
+}
+.react-flow__selection {
+  background: rgb(var(--accent) / 0.08);
+  border: 1px dashed rgb(var(--accent) / 0.6);
 }
 
 /* Tag filter: dim nodes that don't match the active tags */
@@ -75,8 +376,26 @@ body {
 /* Play mode card transition */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .animate-fade-in {
   animation: fadeIn 0.25s ease-out;
+}
+@keyframes nfPop {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.animate-pop {
+  animation: nfPop 0.14s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

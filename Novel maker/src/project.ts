@@ -2,7 +2,7 @@
 // graph (nodes + edges). Shared by the store, players, and the exporter.
 
 import type { Edge, Node } from '@xyflow/react';
-import type { NodeData } from './types';
+import type { NodeData, VariableDef, VarType } from './types';
 
 export interface Arc {
   id: string;
@@ -13,10 +13,27 @@ export interface Arc {
 }
 
 export interface Project {
-  version: 2;
+  version: 3;
   meta: { title: string };
   activeArcId: string;
   arcs: Arc[];
+  /** Story variables (flags, counters, text), shared by every arc. */
+  variables: VariableDef[];
+}
+
+const VAR_TYPES: VarType[] = ['bool', 'number', 'text'];
+
+/** Keep only well-formed variable definitions. */
+export function migrateVariables(raw: unknown): VariableDef[] {
+  if (!Array.isArray(raw)) return [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return raw.flatMap((v: any) => {
+    if (!v || typeof v !== 'object') return [];
+    const type: VarType = VAR_TYPES.includes(v.type) ? v.type : 'number';
+    const initial =
+      type === 'bool' ? v.initial === true : type === 'number' ? Number(v.initial) || 0 : String(v.initial ?? '');
+    return [{ id: String(v.id || newId()), name: String(v.name ?? ''), type, initial, note: v.note ? String(v.note) : undefined }];
+  });
 }
 
 export function newId(): string {
@@ -24,7 +41,11 @@ export function newId(): string {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-// Legacy single 'start' node -> Chapter (kept from earlier migration).
+// Per-node fixes for older saves:
+// - legacy single 'start' node -> Chapter
+// - decision choices stored as plain strings -> { id, label } items.
+//   Migrated ids are the old index ("0", "1", …) so existing `choice-<idx>`
+//   wires keep working unchanged; new choices get UUIDs, which never collide.
 export function migrateNodes(nodes: unknown): Node<NodeData>[] {
   if (!Array.isArray(nodes)) return [];
   return nodes.map((n) => {
@@ -34,13 +55,72 @@ export function migrateNodes(nodes: unknown): Node<NodeData>[] {
       const name = node.data?.name || node.data?.text || 'Chapter 1';
       return { ...node, type: 'chapter', data: { ...node.data, kind: 'chapter', name } } as Node<NodeData>;
     }
+    if (node.type === 'decision' && Array.isArray(node.data?.choices)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const choices = node.data.choices.map((c: any, i: number) =>
+        typeof c === 'string' ? { id: String(i), label: c } : { ...c, id: String(c?.id ?? i), label: String(c?.label ?? '') }
+      );
+      return { ...node, data: { ...node.data, choices } } as Node<NodeData>;
+    }
     return node as Node<NodeData>;
   });
 }
 
 /**
- * Normalize any saved blob into a Project:
- * - v2 (`{ version:2, arcs:[...] }`) → validated/normalized.
+ * Node ids must be unique across the WHOLE project (loop progress and the
+ * player's call stack are keyed by node id). Older saves restarted ids at n1
+ * in every arc, and Duplicate Arc copied ids verbatim — re-id any repeats and
+ * rewire that arc's edges.
+ */
+export function ensureUniqueIds(arcs: Arc[]): Arc[] {
+  const seen = new Set<string>();
+  return arcs.map((arc) => {
+    const remap = new Map<string, string>();
+    const nodes = arc.nodes.map((n) => {
+      if (!seen.has(n.id)) {
+        seen.add(n.id);
+        return n;
+      }
+      const id = newId();
+      remap.set(n.id, id);
+      seen.add(id);
+      return { ...n, id };
+    });
+    if (remap.size === 0) return arc;
+    const edges = arc.edges.map((e) => ({
+      ...e,
+      source: remap.get(e.source) ?? e.source,
+      target: remap.get(e.target) ?? e.target,
+    }));
+    return { ...arc, nodes, edges };
+  });
+}
+
+/** Deep-copy a graph giving every node and edge a fresh id (Duplicate Arc). */
+export function cloneWithNewIds(
+  nodes: Node<NodeData>[],
+  edges: Edge[]
+): { nodes: Node<NodeData>[]; edges: Edge[] } {
+  const remap = new Map<string, string>();
+  const ns = structuredClone(nodes).map((n) => {
+    const id = newId();
+    remap.set(n.id, id);
+    return { ...n, id, selected: false };
+  });
+  const es = structuredClone(edges).map((e) => ({
+    ...e,
+    id: newId(),
+    source: remap.get(e.source) ?? e.source,
+    target: remap.get(e.target) ?? e.target,
+    selected: false,
+  }));
+  return { nodes: ns, edges: es };
+}
+
+/**
+ * Normalize any saved blob into a Project (current format: v3):
+ * - v3 (`{ version:3, arcs, variables }`) / v2 (`{ version:2, arcs }`) → normalized;
+ *   v2 simply gets `variables: []`.
  * - v1 (`{ nodes, edges }`) → wrapped as a single "Arc 1".
  */
 export function migrateProject(raw: unknown): Project {
@@ -55,10 +135,18 @@ export function migrateProject(raw: unknown): Project {
       nextId: a.nextId ?? 1,
     }));
     if (arcs.length === 0) arcs.push(emptyArc('Arc 1'));
+    const unique = ensureUniqueIds(arcs);
+    arcs.splice(0, arcs.length, ...unique);
     const activeArcId = arcs.some((a) => a.id === data.activeArcId)
       ? data.activeArcId
       : arcs[0].id;
-    return { version: 2, meta: { title: data.meta?.title || 'My Story' }, activeArcId, arcs };
+    return {
+      version: 3,
+      meta: { title: data.meta?.title || 'My Story' },
+      activeArcId,
+      arcs,
+      variables: migrateVariables(data.variables),
+    };
   }
   // v1: single graph
   const arc: Arc = {
@@ -68,7 +156,7 @@ export function migrateProject(raw: unknown): Project {
     edges: Array.isArray(data?.edges) ? data.edges : [],
     nextId: data?.nextId ?? 1,
   };
-  return { version: 2, meta: { title: 'My Story' }, activeArcId: arc.id, arcs: [arc] };
+  return { version: 3, meta: { title: 'My Story' }, activeArcId: arc.id, arcs: [arc], variables: [] };
 }
 
 export function emptyArc(name: string): Arc {

@@ -1,8 +1,10 @@
+import { alertDialog, confirmDialog } from './ui/dialogs';
 import { useEffect, useRef, useState } from 'react';
 import { useFlowStore } from './store';
 
 export default function ArcTabs() {
   const arcs = useFlowStore((s) => s.arcs);
+  const projectTitle = useFlowStore((s) => s.projectTitle);
   const activeArcId = useFlowStore((s) => s.activeArcId);
   const setActiveArc = useFlowStore((s) => s.setActiveArc);
   const addArc = useFlowStore((s) => s.addArc);
@@ -34,18 +36,27 @@ export default function ArcTabs() {
     setEditingId(null);
   };
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     setMenuId(null);
     if (arcs.length <= 1) {
-      alert('You need at least one arc.');
+      void alertDialog({ title: 'Keep at least one arc', message: 'A story needs at least one arc page.' });
       return;
     }
-    if (confirm(`Delete arc "${name}"? This removes its whole page.`)) deleteArc(id);
+    const ok = await confirmDialog({
+      title: `Delete arc “${name}”?`,
+      message: 'This removes its whole page.',
+      confirmLabel: 'Delete arc',
+      danger: true,
+    });
+    if (ok) deleteArc(id);
   };
 
   return (
-    <div className="h-9 bg-ink-900 border-b border-ink-600 flex items-stretch px-2 gap-1 flex-shrink-0 overflow-x-auto">
-      <span className="self-center text-[11px] text-gray-500 pr-1 select-none">Story ▸</span>
+    <div className="h-10 bg-bg border-b border-border flex items-stretch px-2 sm:px-3 gap-1 flex-shrink-0 overflow-x-auto">
+      <span className="self-center font-story italic text-[14px] text-fg-soft pl-1 pr-2 select-none truncate max-w-[220px]" title="Project">
+        {projectTitle}
+      </span>
+      <span className="self-center text-faint pr-1 select-none">/</span>
       {arcs.map((arc) => {
         const active = arc.id === activeArcId;
         return (
@@ -66,10 +77,10 @@ export default function ArcTabs() {
               <button
                 onClick={() => setActiveArc(arc.id)}
                 onDoubleClick={() => startRename(arc.id, arc.name)}
-                className={`my-1 pl-3 pr-1 h-7 rounded-t flex items-center gap-1 text-xs border-b-2 transition ${
+                className={`my-1.5 pl-3 pr-1 h-7 rounded-lg flex items-center gap-1 text-[12.5px] border transition-colors ${
                   active
-                    ? 'text-white border-accent bg-ink-800 font-semibold'
-                    : 'text-gray-400 border-transparent hover:text-white hover:bg-ink-800/50'
+                    ? 'text-fg border-border bg-surface font-semibold shadow-sm'
+                    : 'text-muted border-transparent hover:text-fg hover:bg-surface-2'
                 }`}
                 title="Click to open · double-click to rename"
               >
@@ -88,11 +99,11 @@ export default function ArcTabs() {
             {menuId === arc.id && (
               <div
                 ref={menuRef}
-                className="absolute top-8 left-0 w-36 bg-ink-800 border border-ink-600 rounded-lg shadow-2xl z-40 p-1 text-sm"
+                className="nf-menu animate-pop absolute top-9 left-0 w-40 text-sm"
               >
                 <button onClick={() => startRename(arc.id, arc.name)} className="w-full text-left text-gray-200 hover:bg-ink-700 hover:text-white rounded px-2 py-1.5">Rename</button>
                 <button onClick={() => { setMenuId(null); duplicateArc(arc.id); }} className="w-full text-left text-gray-200 hover:bg-ink-700 hover:text-white rounded px-2 py-1.5">Duplicate</button>
-                <button onClick={() => handleDelete(arc.id, arc.name)} className="w-full text-left text-gray-400 hover:bg-accent hover:text-white rounded px-2 py-1.5">Delete</button>
+                <button onClick={() => handleDelete(arc.id, arc.name)} className="w-full text-left text-gray-400 hover:bg-danger/15 hover:text-danger rounded px-2 py-1.5">Delete</button>
               </div>
             )}
           </div>

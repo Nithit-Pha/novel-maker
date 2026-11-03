@@ -1,0 +1,412 @@
+{
+  "version": 3,
+  "meta": {
+    "title": "The Lighthouse"
+  },
+  "activeArcId": "arc-main",
+  "variables": [
+    {
+      "id": "trust",
+      "name": "trust_mira",
+      "type": "number",
+      "initial": 0,
+      "note": "How much Mira trusts you"
+    },
+    {
+      "id": "has_key",
+      "name": "has_key",
+      "type": "bool",
+      "initial": false,
+      "note": "Mira holds the lamp-room key"
+    }
+  ],
+  "arcs": [
+    {
+      "id": "arc-main",
+      "name": "Arc 1",
+      "nodes": [
+        {
+          "id": "ch1",
+          "type": "chapter",
+          "position": {
+            "x": 0,
+            "y": 200
+          },
+          "data": {
+            "kind": "chapter",
+            "name": "Chapter 1 — The Storm"
+          }
+        },
+        {
+          "id": "sc1",
+          "type": "scene",
+          "position": {
+            "x": 360,
+            "y": 200
+          },
+          "data": {
+            "kind": "scene",
+            "background": "Lighthouse, storm night",
+            "description": "Waves hit the rocks. Someone is knocking at the lighthouse door."
+          }
+        },
+        {
+          "id": "d1",
+          "type": "decision",
+          "position": {
+            "x": 720,
+            "y": 160
+          },
+          "data": {
+            "kind": "decision",
+            "prompt": "A stranger knocks. What do you do?",
+            "choices": [
+              {
+                "id": "let",
+                "label": "Let her in",
+                "effects": [
+                  {
+                    "id": "f1",
+                    "varId": "trust",
+                    "op": "add",
+                    "value": 2
+                  }
+                ]
+              },
+              {
+                "id": "talk",
+                "label": "Talk through the door",
+                "effects": [
+                  {
+                    "id": "f2",
+                    "varId": "trust",
+                    "op": "add",
+                    "value": 1
+                  }
+                ]
+              },
+              {
+                "id": "ignore",
+                "label": "Ignore the knock",
+                "effects": [
+                  {
+                    "id": "f3",
+                    "varId": "trust",
+                    "op": "sub",
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "mira1",
+          "type": "dialog",
+          "position": {
+            "x": 1080,
+            "y": 200
+          },
+          "data": {
+            "kind": "dialog",
+            "character": "Mira",
+            "text": "The storm will not end tonight. Neither will this conversation."
+          }
+        },
+        {
+          "id": "lamp",
+          "type": "chance",
+          "position": {
+            "x": 1440,
+            "y": 200
+          },
+          "data": {
+            "kind": "chance",
+            "title": "The lamp",
+            "show": "reveal",
+            "outcomes": [
+              {
+                "id": "fail",
+                "label": "The lamp flickers out",
+                "weight": 1
+              },
+              {
+                "id": "hold",
+                "label": "The lamp holds",
+                "weight": 2
+              }
+            ]
+          }
+        },
+        {
+          "id": "mira2",
+          "type": "dialog",
+          "position": {
+            "x": 1800,
+            "y": -20
+          },
+          "data": {
+            "kind": "dialog",
+            "character": "Mira",
+            "text": "I can fix it — if you trust me with the key."
+          }
+        },
+        {
+          "id": "d2",
+          "type": "decision",
+          "position": {
+            "x": 2160,
+            "y": 200
+          },
+          "data": {
+            "kind": "decision",
+            "prompt": "Mira asks for the key to the lamp room.",
+            "choices": [
+              {
+                "id": "give",
+                "label": "Give her the key",
+                "effects": [
+                  {
+                    "id": "f4",
+                    "varId": "has_key",
+                    "op": "set",
+                    "value": true
+                  }
+                ],
+                "condition": {
+                  "mode": "all",
+                  "clauses": [
+                    {
+                      "id": "c1",
+                      "varId": "trust",
+                      "cmp": ">=",
+                      "value": 2
+                    }
+                  ]
+                },
+                "whenLocked": "show-locked",
+                "lockedText": "Mira doesn't trust you enough yet"
+              },
+              {
+                "id": "keep",
+                "label": "Keep the key"
+              },
+              {
+                "id": "out",
+                "label": "Throw her out into the storm",
+                "effects": [
+                  {
+                    "id": "f5",
+                    "varId": "trust",
+                    "op": "sub",
+                    "value": 5
+                  }
+                ],
+                "condition": {
+                  "mode": "all",
+                  "clauses": [
+                    {
+                      "id": "c2",
+                      "varId": "trust",
+                      "cmp": "<=",
+                      "value": 0
+                    }
+                  ]
+                },
+                "whenLocked": "hide"
+              }
+            ]
+          }
+        },
+        {
+          "id": "check",
+          "type": "condition",
+          "position": {
+            "x": 2520,
+            "y": 200
+          },
+          "data": {
+            "kind": "condition",
+            "title": "Which morning?",
+            "branches": [
+              {
+                "id": "ally",
+                "label": "Trusted ally",
+                "condition": {
+                  "mode": "all",
+                  "clauses": [
+                    {
+                      "id": "c3",
+                      "varId": "has_key",
+                      "cmp": "==",
+                      "value": true
+                    },
+                    {
+                      "id": "c4",
+                      "varId": "trust",
+                      "cmp": ">=",
+                      "value": 2
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "cold",
+                "label": "Cold night",
+                "condition": {
+                  "mode": "all",
+                  "clauses": [
+                    {
+                      "id": "c5",
+                      "varId": "trust",
+                      "cmp": "<=",
+                      "value": 0
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "endGood",
+          "type": "end",
+          "position": {
+            "x": 2880,
+            "y": -300
+          },
+          "data": {
+            "kind": "end",
+            "title": "Two Keepers",
+            "description": "By dawn the lamp burns brighter than ever, and the lighthouse has two keepers.",
+            "character": "Mira",
+            "text": "Same time tomorrow, keeper?"
+          }
+        },
+        {
+          "id": "endBad",
+          "type": "end",
+          "position": {
+            "x": 2880,
+            "y": 180
+          },
+          "data": {
+            "kind": "end",
+            "title": "Alone in the Dark",
+            "description": "The lamp dies. Nobody knocks again.",
+            "character": "",
+            "text": ""
+          }
+        },
+        {
+          "id": "endMid",
+          "type": "end",
+          "position": {
+            "x": 2880,
+            "y": 660
+          },
+          "data": {
+            "kind": "end",
+            "title": "Morning, Somehow",
+            "description": "The storm passes. At first light, Mira steps out into the grey morning.",
+            "character": "Mira",
+            "text": "Thank you for the shelter. I won’t forget it."
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-ch1-out-sc1",
+          "source": "ch1",
+          "sourceHandle": null,
+          "target": "sc1"
+        },
+        {
+          "id": "e-sc1-out-d1",
+          "source": "sc1",
+          "sourceHandle": null,
+          "target": "d1"
+        },
+        {
+          "id": "e-d1-choice-let-mira1",
+          "source": "d1",
+          "sourceHandle": "choice-let",
+          "target": "mira1"
+        },
+        {
+          "id": "e-d1-choice-talk-mira1",
+          "source": "d1",
+          "sourceHandle": "choice-talk",
+          "target": "mira1"
+        },
+        {
+          "id": "e-d1-choice-ignore-mira1",
+          "source": "d1",
+          "sourceHandle": "choice-ignore",
+          "target": "mira1"
+        },
+        {
+          "id": "e-mira1-out-lamp",
+          "source": "mira1",
+          "sourceHandle": null,
+          "target": "lamp"
+        },
+        {
+          "id": "e-lamp-outcome-fail-mira2",
+          "source": "lamp",
+          "sourceHandle": "outcome-fail",
+          "target": "mira2"
+        },
+        {
+          "id": "e-lamp-outcome-hold-d2",
+          "source": "lamp",
+          "sourceHandle": "outcome-hold",
+          "target": "d2"
+        },
+        {
+          "id": "e-mira2-out-d2",
+          "source": "mira2",
+          "sourceHandle": null,
+          "target": "d2"
+        },
+        {
+          "id": "e-d2-choice-give-check",
+          "source": "d2",
+          "sourceHandle": "choice-give",
+          "target": "check"
+        },
+        {
+          "id": "e-d2-choice-keep-check",
+          "source": "d2",
+          "sourceHandle": "choice-keep",
+          "target": "check"
+        },
+        {
+          "id": "e-d2-choice-out-check",
+          "source": "d2",
+          "sourceHandle": "choice-out",
+          "target": "check"
+        },
+        {
+          "id": "e-check-branch-ally-endGood",
+          "source": "check",
+          "sourceHandle": "branch-ally",
+          "target": "endGood"
+        },
+        {
+          "id": "e-check-branch-cold-endBad",
+          "source": "check",
+          "sourceHandle": "branch-cold",
+          "target": "endBad"
+        },
+        {
+          "id": "e-check-else-endMid",
+          "source": "check",
+          "sourceHandle": "else",
+          "target": "endMid"
+        }
+      ],
+      "nextId": 1
+    }
+  ]
+}

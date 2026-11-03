@@ -21,6 +21,12 @@ export function nodeIcon(node: FlowNode): string {
       return '📖';
     case 'portal':
       return '🌀';
+    case 'condition':
+      return '🧭';
+    case 'chance':
+      return '🎲';
+    case 'end':
+      return '🏁';
     default:
       return '•';
   }
@@ -43,6 +49,9 @@ export function nodeTitle(node: FlowNode): string {
   }
   if (d.kind === 'loop') return truncate(d.title?.trim(), 60) || 'Loop';
   if (d.kind === 'chapter') return truncate(d.name?.trim(), 60) || 'Chapter';
+  if (d.kind === 'condition') return truncate(d.title?.trim(), 60) || 'Condition';
+  if (d.kind === 'chance') return truncate(d.title?.trim(), 60) || 'Chance';
+  if (d.kind === 'end') return truncate(d.title?.trim(), 60) || 'Ending';
   // portal
   return d.label?.trim() || 'Go to Arc';
 }
@@ -51,10 +60,14 @@ export function nodeTitle(node: FlowNode): string {
 export function nodeBody(node: FlowNode): string {
   const d = node.data;
   if (d.kind === 'dialog') return d.text ?? '';
-  if (d.kind === 'decision') return [d.prompt, ...(d.choices ?? [])].filter(Boolean).join(' · ');
+  if (d.kind === 'decision') return [d.prompt, ...(d.choices ?? []).map((c) => c.label)].filter(Boolean).join(' · ');
   if (d.kind === 'scene') return d.description ?? '';
   if (d.kind === 'loop') return [d.title, ...(d.items ?? []).map((it) => it.label)].filter(Boolean).join(' · ');
   if (d.kind === 'chapter') return d.name ?? '';
+  if (d.kind === 'condition') return [d.title, ...(d.branches ?? []).map((b) => b.label)].filter(Boolean).join(' · ');
+  if (d.kind === 'chance') return [d.title, ...(d.outcomes ?? []).map((o) => o.label)].filter(Boolean).join(' · ');
+  if (d.kind === 'end')
+    return [d.title, d.description, d.text ? `${d.character ? `${d.character}: ` : ''}${d.text}` : ''].filter(Boolean).join(' · ');
   return d.label ?? '';
 }
 
@@ -63,10 +76,13 @@ export function searchableText(node: FlowNode): string {
   const d = node.data;
   const parts: string[] = [];
   if (d.kind === 'dialog') parts.push(d.character ?? '', d.text ?? '');
-  else if (d.kind === 'decision') parts.push(d.prompt ?? '', ...(d.choices ?? []));
+  else if (d.kind === 'decision') parts.push(d.prompt ?? '', ...(d.choices ?? []).map((c) => c.label));
   else if (d.kind === 'scene') parts.push(d.background ?? '', d.description ?? '');
   else if (d.kind === 'loop') parts.push(d.title ?? '', ...(d.items ?? []).map((it) => it.label));
   else if (d.kind === 'chapter') parts.push(d.name ?? '');
+  else if (d.kind === 'condition') parts.push(d.title ?? '', ...(d.branches ?? []).map((b) => b.label));
+  else if (d.kind === 'chance') parts.push(d.title ?? '', ...(d.outcomes ?? []).map((o) => o.label));
+  else if (d.kind === 'end') parts.push(d.title ?? '', d.description ?? '', d.character ?? '', d.text ?? '');
   else parts.push(d.label ?? '');
   parts.push(...(d.tags ?? []));
   return parts.join(' \n ').toLowerCase();

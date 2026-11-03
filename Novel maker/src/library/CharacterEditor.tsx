@@ -1,3 +1,4 @@
+import { alertDialog, confirmDialog } from '../ui/dialogs';
 import { useRef, useState } from 'react';
 import {
   type Character,
@@ -31,11 +32,11 @@ export default function CharacterEditor({ initial, onSave, onCancel, onDelete, i
     e.target.value = '';
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      alert('Please choose an image file.');
+      void alertDialog({ title: 'Not an image', message: 'Please choose an image file (PNG, JPG, WebP…).' });
       return;
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      alert('Image is too large (max 3 MB). Please pick a smaller one.');
+      void alertDialog({ title: 'Image too large', message: 'The maximum is 3 MB. Please pick a smaller image.' });
       return;
     }
     const reader = new FileReader();
@@ -61,7 +62,7 @@ export default function CharacterEditor({ initial, onSave, onCancel, onDelete, i
 
   const handleSave = () => {
     if (!draft.name.trim()) {
-      alert('Please give your character a name.');
+      void alertDialog({ title: 'Name needed', message: 'Please give your character a name.' });
       return;
     }
     onSave(draft);
@@ -89,10 +90,16 @@ export default function CharacterEditor({ initial, onSave, onCancel, onDelete, i
         </span>
         {!isNew && onDelete && (
           <button
-            onClick={() => {
-              if (confirm(`Delete "${draft.name || 'this character'}"?`)) onDelete(draft.id);
+            onClick={async () => {
+              const ok = await confirmDialog({
+                title: `Delete “${draft.name || 'this character'}”?`,
+                message: 'This removes the character from this project’s library.',
+                confirmLabel: 'Delete',
+                danger: true,
+              });
+              if (ok) onDelete(draft.id);
             }}
-            className="text-gray-500 hover:text-white hover:bg-accent rounded px-2 py-0.5 text-xs transition"
+            className="text-gray-500 hover:text-danger hover:bg-danger/15 rounded px-2 py-0.5 text-xs transition"
           >
             Delete
           </button>
@@ -162,7 +169,7 @@ export default function CharacterEditor({ initial, onSave, onCancel, onDelete, i
                   />
                   <button
                     onClick={() => removeOutfit(o.id)}
-                    className="text-gray-500 hover:text-white hover:bg-accent rounded px-1.5 text-sm flex-shrink-0"
+                    className="text-gray-500 hover:text-danger hover:bg-danger/15 rounded px-1.5 text-sm flex-shrink-0"
                     title="Remove outfit"
                   >
                     ✕
@@ -223,7 +230,7 @@ export default function CharacterEditor({ initial, onSave, onCancel, onDelete, i
         </button>
         <button
           onClick={handleSave}
-          className="flex-1 text-sm bg-accent hover:bg-accent/90 text-white rounded py-1.5 transition font-semibold"
+          className="flex-1 text-sm bg-accent hover:brightness-110 text-on-accent rounded py-1.5 transition font-semibold"
         >
           Save Character
         </button>
@@ -289,7 +296,7 @@ function StatList({
             />
             <button
               onClick={() => onRemove(s.id)}
-              className="text-gray-500 hover:text-white hover:bg-accent rounded px-1.5 text-sm flex-shrink-0"
+              className="text-gray-500 hover:text-danger hover:bg-danger/15 rounded px-1.5 text-sm flex-shrink-0"
               title="Remove"
             >
               ✕
@@ -303,7 +310,7 @@ function StatList({
               step={1}
               value={s.value}
               onChange={(e) => onUpdate(s.id, { value: Number(e.target.value) })}
-              className="flex-1 accent-accent-dialog"
+              className="flex-1 accent-[rgb(var(--n-dialog))]"
             />
             <span className="text-xs text-white w-8 text-right tabular-nums">
               {s.value}/{STAT_MAX}

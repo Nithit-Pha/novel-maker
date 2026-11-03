@@ -16,12 +16,10 @@ export default function PortalNode({ id, data, selected }: NodeProps<PortalNodeT
 
   return (
     <div
-      className={`min-w-[240px] max-w-[300px] bg-ink-800 border-2 rounded-lg shadow-lg ${
-        selected ? 'border-accent' : 'border-accent-portal'
-      }`}
+      className={`nf-node nf-kind-portal min-w-[240px] max-w-[300px] ${selected ? 'is-selected' : ''}`}
     >
       <Handle type="target" position={Position.Left} id="in" />
-      <NodeHeader id={id} icon="🌀" label="Go to Arc" accentText="text-accent-portal" pinned={data.pinned} />
+      <NodeHeader id={id} kind="portal" label="Go to Arc" pinned={data.pinned} />
       <div className="p-3 space-y-2">
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">

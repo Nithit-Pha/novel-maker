@@ -1,6 +1,7 @@
-' Novel Flow launcher — double-click to start the app with no console window.
-' It installs dependencies on first run, starts the dev server hidden, and
-' lets Vite open your browser automatically once it's ready.
+' Novel Flow launcher - double-click to start the app with no console window.
+' It installs / updates dependencies when needed, starts the dev server hidden,
+' and lets Vite open your browser automatically once it's ready.
+' Projects are saved in the "saves" folder next to this file.
 
 Option Explicit
 Dim sh, fso, dir, rc
@@ -20,14 +21,17 @@ If rc <> 0 Then
   WScript.Quit
 End If
 
-' 2) First launch: install dependencies (hidden, wait until done).
-If Not fso.FolderExists(dir & "\node_modules") Then
-  MsgBox "First launch: installing dependencies." & vbCrLf & _
+' 2) Install / update dependencies when needed (hidden, wait until done).
+'    "npm ls" fails when node_modules is missing OR when an update added
+'    new packages to package.json.
+rc = sh.Run("cmd /c npm ls --depth=0 >nul 2>nul", 0, True)
+If rc <> 0 Then
+  MsgBox "Installing / updating dependencies." & vbCrLf & _
          "This can take 1-2 minutes." & vbCrLf & vbCrLf & _
          "Your browser will open automatically when it's ready.", 64, "Novel Flow"
-  rc = sh.Run("cmd /c npm install", 0, True)
+  rc = sh.Run("cmd /c npm install --no-audit --no-fund", 0, True)
   If rc <> 0 Then
-    MsgBox "Dependency install failed. Try running install-and-run.bat once to see the error.", 16, "Novel Flow"
+    MsgBox "Dependency install failed. Run install-and-run.bat once to see the error.", 16, "Novel Flow"
     WScript.Quit
   End If
 End If

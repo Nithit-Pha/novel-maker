@@ -3,6 +3,7 @@ import { useFlowStore } from '../store';
 import type { LoopData } from '../types';
 import { itemHandle } from '../engine';
 import NodeHeader from './NodeHeader';
+import { hotRow } from '../ui/uiStore';
 import TagBar from './TagBar';
 
 type LoopNodeType = Node<LoopData, 'loop'>;
@@ -25,12 +26,10 @@ export default function LoopNode({ id, data, selected }: NodeProps<LoopNodeType>
 
   return (
     <div
-      className={`min-w-[280px] max-w-[320px] bg-ink-800 border-2 rounded-lg shadow-lg ${
-        selected ? 'border-accent' : 'border-accent-loop'
-      }`}
+      className={`nf-node nf-kind-loop min-w-[280px] max-w-[320px] ${selected ? 'is-selected' : ''}`}
     >
       <Handle type="target" position={Position.Left} id="in" />
-      <NodeHeader id={id} icon="🔁" label="Loop" accentText="text-accent-loop" pinned={data.pinned} />
+      <NodeHeader id={id} kind="loop" label="Loop" pinned={data.pinned} />
       <div className="p-3 space-y-2">
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">
@@ -50,7 +49,7 @@ export default function LoopNode({ id, data, selected }: NodeProps<LoopNodeType>
           </label>
           <div className="space-y-1.5">
             {data.items.map((item) => (
-              <div key={item.id} className="relative flex items-center gap-1">
+              <div key={item.id} className="relative flex items-center gap-1" {...hotRow(id, itemHandle(item.id))}>
                 <input
                   value={item.label}
                   onChange={(e) => setItemLabel(item.id, e.target.value)}
@@ -60,7 +59,7 @@ export default function LoopNode({ id, data, selected }: NodeProps<LoopNodeType>
                 />
                 <button
                   onClick={() => removeLoopItem(id, item.id)}
-                  className="bg-ink-600 hover:bg-accent text-gray-300 hover:text-white w-6 h-6 rounded text-xs flex-shrink-0"
+                  className="text-faint hover:bg-danger/15 hover:text-danger w-7 h-7 rounded-md text-xs flex items-center justify-center flex-shrink-0"
                 >
                   ✕
                 </button>
@@ -88,7 +87,7 @@ export default function LoopNode({ id, data, selected }: NodeProps<LoopNodeType>
         <TagBar id={id} tags={data.tags} accentBorder="focus:border-accent-loop" />
       </div>
       {/* Exit once every item is completed */}
-      <Handle type="source" position={Position.Bottom} id="done" style={{ background: '#2dd4bf' }} />
+      <Handle type="source" position={Position.Bottom} id="done"  />
     </div>
   );
 }

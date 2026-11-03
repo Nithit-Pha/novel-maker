@@ -1,4 +1,59 @@
-export type NodeKind = 'chapter' | 'dialog' | 'decision' | 'scene' | 'loop' | 'portal';
+export type NodeKind =
+  | 'chapter'
+  | 'dialog'
+  | 'decision'
+  | 'scene'
+  | 'loop'
+  | 'portal'
+  | 'condition'
+  | 'chance'
+  | 'end';
+
+// ---------------------------------------------------------------------------
+// Story state: variables, effects, conditions
+// ---------------------------------------------------------------------------
+
+export type VarType = 'bool' | 'number' | 'text';
+export type VarValue = boolean | number | string;
+
+/** A project-level story variable. References use `id`, so renaming is safe. */
+export interface VariableDef {
+  id: string;
+  name: string;
+  type: VarType;
+  initial: VarValue;
+  note?: string;
+}
+
+export type EffectOp = 'set' | 'add' | 'sub' | 'toggle';
+
+/** A change to a variable, e.g. `trust_mira add 1`. */
+export interface Effect {
+  id: string;
+  varId: string;
+  op: EffectOp;
+  value?: VarValue;
+}
+
+export type Cmp = '==' | '!=' | '>' | '>=' | '<' | '<=';
+
+/** One rule row, e.g. `trust_mira >= 5`. */
+export interface Clause {
+  id: string;
+  varId: string;
+  cmp: Cmp;
+  value: VarValue;
+}
+
+/** `all` = every rule must hold, `any` = at least one. No rules = always true. */
+export interface Condition {
+  mode: 'all' | 'any';
+  clauses: Clause[];
+}
+
+// ---------------------------------------------------------------------------
+// Node data
+// ---------------------------------------------------------------------------
 
 // Fields shared by every node kind.
 // @xyflow/react v12 requires a node's `data` to be assignable to
@@ -8,6 +63,8 @@ export interface CommonNodeData {
   pinned?: boolean;
   /** Free-form labels for filtering (feature: tags). */
   tags?: string[];
+  /** Variable changes applied every time the player arrives at this node. */
+  onEnter?: Effect[];
   [key: string]: unknown;
 }
 
@@ -23,22 +80,34 @@ export interface DialogData extends CommonNodeData {
   text: string;
 }
 
+/** One branch of a Loop node; identified by a stable id (handle `item-<id>`). */
+export interface FlowItem {
+  id: string;
+  label: string;
+}
+
+/** A decision choice (handle `choice-<id>`), optionally with effects and a condition. */
+export interface Choice extends FlowItem {
+  /** Applied when the player picks this choice. */
+  effects?: Effect[];
+  /** The choice can only be picked while this holds. */
+  condition?: Condition;
+  /** What players see while the condition fails. Default: 'show-locked'. */
+  whenLocked?: 'hide' | 'show-locked';
+  /** Shown on a locked choice, e.g. "Requires trust ≥ 5". */
+  lockedText?: string;
+}
+
 export interface DecisionData extends CommonNodeData {
   kind: 'decision';
   prompt: string;
-  choices: string[];
+  choices: Choice[];
 }
 
 export interface SceneData extends CommonNodeData {
   kind: 'scene';
   background: string;
   description: string;
-}
-
-/** One branch of a Loop node; identified by a stable id (handle `item-<id>`). */
-export interface FlowItem {
-  id: string;
-  label: string;
 }
 
 export interface LoopData extends CommonNodeData {
@@ -54,4 +123,60 @@ export interface PortalData extends CommonNodeData {
   label?: string;
 }
 
-export type NodeData = ChapterData | DialogData | DecisionData | SceneData | LoopData | PortalData;
+/** One branch of a Condition node (handle `branch-<id>`). */
+export interface ConditionBranch {
+  id: string;
+  label: string;
+  condition: Condition;
+}
+
+/** Silent router: first branch whose condition holds, else the `else` handle. */
+export interface ConditionData extends CommonNodeData {
+  kind: 'condition';
+  title: string;
+  branches: ConditionBranch[];
+}
+
+/** One outcome of a Chance node (handle `outcome-<id>`). */
+export interface ChanceOutcome {
+  id: string;
+  label: string;
+  weight: number;
+}
+
+/** Weighted random router. `reveal` shows the result as a card. */
+export interface ChanceData extends CommonNodeData {
+  kind: 'chance';
+  title: string;
+  outcomes: ChanceOutcome[];
+  show: 'silent' | 'reveal';
+}
+
+/** Ending type from older saves (no longer edited or shown; kept so old files load). */
+export type EndingType = 'good' | 'bad' | 'neutral' | 'true' | 'custom';
+
+/** An ending. Every field is optional; an empty ending just shows "The End". */
+export interface EndData extends CommonNodeData {
+  kind: 'end';
+  /** Optional name, e.g. "Two Keepers" — heading on the ending screen, used in search. */
+  title: string;
+  /** Context / narration shown on the ending screen. */
+  description: string;
+  /** Optional closing line: who speaks… */
+  character?: string;
+  /** …and what they say. */
+  text?: string;
+  /** @deprecated ignored; present only in older saves. */
+  endingType?: EndingType;
+}
+
+export type NodeData =
+  | ChapterData
+  | DialogData
+  | DecisionData
+  | SceneData
+  | LoopData
+  | PortalData
+  | ConditionData
+  | ChanceData
+  | EndData;

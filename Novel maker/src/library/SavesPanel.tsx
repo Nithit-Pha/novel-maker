@@ -1,3 +1,5 @@
+import { FolderOutput } from 'lucide-react';
+import { confirmDialog } from '../ui/dialogs';
 import { useCallback, useEffect, useState } from 'react';
 import { useFlowStore } from '../store';
 import { useCharacterStore } from './characterStore';
@@ -98,13 +100,12 @@ export default function SavesPanel({ onClose }: Props) {
   };
 
   const handleLoad = async (name: string) => {
-    if (
-      !confirm(
-        `Load “${name}”?\n\nThis replaces the current story and character library on the canvas. ` +
-          `Save first if you want to keep your current work.`
-      )
-    )
-      return;
+    const ok = await confirmDialog({
+      title: `Load “${name}”?`,
+      message: 'This replaces the current story and character library on the canvas.',
+      confirmLabel: 'Load',
+    });
+    if (!ok) return;
     setBusy(true);
     setErr(null);
     try {
@@ -127,7 +128,13 @@ export default function SavesPanel({ onClose }: Props) {
   };
 
   const handleDelete = async (name: string) => {
-    if (!confirm(`Delete saved project “${name}” from the folder? This cannot be undone.`)) return;
+    const ok = await confirmDialog({
+      title: `Delete “${name}”?`,
+      message: 'This deletes the copy in that folder. It cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await deleteProject(handle, name);
@@ -142,17 +149,17 @@ export default function SavesPanel({ onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-30 bg-black/60 flex items-center justify-center p-4"
+      className="fixed inset-0 z-30 bg-black/25 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
-        className="bg-ink-800 border border-ink-600 rounded-xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col"
+        className="nf-panel animate-pop w-full max-w-lg max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* header */}
         <div className="flex items-center px-5 py-3 border-b border-ink-600 flex-shrink-0">
-          <span className="text-base mr-2">💾</span>
-          <h2 className="text-white font-semibold flex-1">Saves</h2>
+          <FolderOutput size={18} className="text-accent mr-2" />
+          <h2 className="font-story text-lg text-fg flex-1">Save a copy to another folder</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-white text-lg leading-none px-1"
@@ -179,7 +186,7 @@ export default function SavesPanel({ onClose }: Props) {
               </p>
               <button
                 onClick={handleConnect}
-                className="bg-accent hover:bg-accent/90 text-white text-sm font-semibold rounded px-4 py-2 transition"
+                className="bg-accent hover:brightness-110 text-on-accent text-sm font-semibold rounded px-4 py-2 transition"
               >
                 Choose saves folder…
               </button>
@@ -194,7 +201,7 @@ export default function SavesPanel({ onClose }: Props) {
               <div className="flex gap-2">
                 <button
                   onClick={handleGrant}
-                  className="bg-accent hover:bg-accent/90 text-white text-sm font-semibold rounded px-4 py-2 transition"
+                  className="bg-accent hover:brightness-110 text-on-accent text-sm font-semibold rounded px-4 py-2 transition"
                 >
                   Reconnect folder
                 </button>
@@ -231,7 +238,7 @@ export default function SavesPanel({ onClose }: Props) {
                 <button
                   onClick={handleSave}
                   disabled={busy || !saveName.trim()}
-                  className="bg-accent hover:bg-accent/90 disabled:opacity-40 text-white text-sm font-semibold rounded px-4 py-2 transition"
+                  className="bg-accent hover:brightness-110 disabled:opacity-40 text-on-accent text-sm font-semibold rounded px-4 py-2 transition"
                 >
                   Save
                 </button>
@@ -273,7 +280,7 @@ export default function SavesPanel({ onClose }: Props) {
                         <button
                           onClick={() => handleDelete(p.name)}
                           disabled={busy}
-                          className="text-xs text-gray-500 hover:text-white hover:bg-accent rounded px-2 py-1 transition disabled:opacity-40"
+                          className="text-xs text-gray-500 hover:text-danger hover:bg-danger/15 rounded px-2 py-1 transition disabled:opacity-40"
                           title="Delete this save"
                         >
                           ✕

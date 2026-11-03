@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
+import { Pin, Search } from 'lucide-react';
 import { useFlowStore } from './store';
+import { NODE_ICONS } from './ui/icons';
+import type { NodeKind } from './types';
 import {
   type FlowNode,
   nodeBody,
-  nodeIcon,
   nodeTitle,
   searchNodes,
 } from './search';
@@ -73,22 +75,22 @@ export default function SearchPalette({ onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-30 bg-black/50 flex items-start justify-center pt-[12vh] px-4"
+      className="fixed inset-0 z-30 bg-black/25 flex items-start justify-center pt-[12vh] px-4"
       onClick={onClose}
     >
       <div
-        className="bg-ink-800 border border-ink-600 rounded-xl shadow-2xl w-full max-w-xl flex flex-col overflow-hidden"
+        className="nf-panel animate-pop w-full max-w-xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 px-4 py-3 border-b border-ink-600">
-          <span className="text-gray-400">🔍</span>
+          <Search size={17} className="text-muted" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder="Search scenes, dialog, decisions, tags…"
-            className="flex-1 bg-transparent text-white text-sm focus:outline-none placeholder-gray-500"
+            className="flex-1 bg-transparent text-fg text-[15px] !border-0 !shadow-none focus:outline-none"
           />
           <kbd className="text-[10px] text-gray-500 border border-ink-600 rounded px-1.5 py-0.5">Esc</kbd>
         </div>
@@ -96,13 +98,13 @@ export default function SearchPalette({ onClose }: Props) {
         <div className="max-h-[55vh] overflow-y-auto">
           {showingPins && (
             <div className="px-4 pt-2 pb-1 text-[10px] uppercase tracking-wider text-gray-500">
-              {pinned.length ? '📌 Pinned' : 'Type to search'}
+              {pinned.length ? 'Pinned' : 'Type to search'}
             </div>
           )}
 
           {results.length === 0 ? (
             <p className="px-4 py-6 text-sm text-ink-500 italic text-center">
-              {showingPins ? 'No pinned nodes yet. Pin a node with 📍 in its header.' : 'No matches.'}
+              {showingPins ? 'No pinned cards yet. Use the pin in a card’s header.' : 'No matches.'}
             </p>
           ) : (
             <ul className="py-1">
@@ -115,11 +117,18 @@ export default function SearchPalette({ onClose }: Props) {
                       i === active ? 'bg-ink-700' : 'hover:bg-ink-700/50'
                     }`}
                   >
-                    <span className="text-base leading-5 mt-0.5">{nodeIcon(node)}</span>
+                    {(() => {
+                      const Icon = NODE_ICONS[node.data.kind as NodeKind];
+                      return (
+                        <span className={`nf-kind-${node.data.kind} mt-0.5`}>
+                          <Icon size={16} className="text-node" />
+                        </span>
+                      );
+                    })()}
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
                         <span className="text-sm text-white truncate">{nodeTitle(node)}</span>
-                        {node.data.pinned && <span className="text-[11px]">📌</span>}
+                        {node.data.pinned && <Pin size={12} className="text-accent" fill="currentColor" />}
                       </span>
                       <span className="block text-xs text-gray-400 truncate">{nodeBody(node)}</span>
                       {(node.data.tags ?? []).length > 0 && (

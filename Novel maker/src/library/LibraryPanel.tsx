@@ -1,13 +1,15 @@
 import { useState } from 'react';
+import { Library as LibraryIcon } from 'lucide-react';
 import { useCharacterStore } from './characterStore';
 import { type Character, emptyCharacter } from './libraryTypes';
 import CharacterEditor from './CharacterEditor';
+import VariablesTab from './VariablesTab';
 
 interface Props {
   onClose: () => void;
 }
 
-type Tab = 'characters' | 'scenes';
+type Tab = 'characters' | 'variables' | 'scenes';
 
 export default function LibraryPanel({ onClose }: Props) {
   const characters = useCharacterStore((s) => s.characters);
@@ -32,11 +34,14 @@ export default function LibraryPanel({ onClose }: Props) {
   };
 
   return (
-    <aside className="absolute top-0 right-0 h-full w-[380px] max-w-[90vw] bg-ink-800 border-l border-ink-600 shadow-2xl flex flex-col z-20">
+    <aside
+      className="absolute top-0 right-0 h-full w-[380px] max-w-[92vw] bg-surface border-l border-border flex flex-col z-20 animate-pop"
+      style={{ boxShadow: 'var(--shadow-lg)' }}
+    >
       {/* panel header */}
       <div className="flex items-center px-4 py-3 border-b border-ink-600 flex-shrink-0">
-        <span className="text-base mr-2">📚</span>
-        <h2 className="text-white font-semibold flex-1">Library</h2>
+        <LibraryIcon size={18} className="text-accent mr-2" />
+        <h2 className="font-story text-lg text-fg flex-1">Library</h2>
         <button
           onClick={onClose}
           className="text-gray-400 hover:text-white text-lg leading-none px-1"
@@ -61,6 +66,9 @@ export default function LibraryPanel({ onClose }: Props) {
             <TabButton active={tab === 'characters'} onClick={() => setTab('characters')}>
               Character
             </TabButton>
+            <TabButton active={tab === 'variables'} onClick={() => setTab('variables')}>
+              Variables
+            </TabButton>
             <TabButton active={tab === 'scenes'} onClick={() => setTab('scenes')}>
               Scene
             </TabButton>
@@ -71,7 +79,7 @@ export default function LibraryPanel({ onClose }: Props) {
               <div className="px-4 py-3 border-b border-ink-600 flex-shrink-0">
                 <button
                   onClick={startNew}
-                  className="w-full bg-accent hover:bg-accent/90 text-white text-sm font-semibold rounded py-2 transition"
+                  className="nf-btn nf-btn-primary w-full h-9"
                 >
                   + Character
                 </button>
@@ -88,6 +96,8 @@ export default function LibraryPanel({ onClose }: Props) {
                 )}
               </div>
             </div>
+          ) : tab === 'variables' ? (
+            <VariablesTab />
           ) : (
             <div className="flex-1 flex items-center justify-center p-6">
               <p className="text-sm text-ink-500 italic text-center">

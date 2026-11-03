@@ -3,6 +3,7 @@ import { useFlowStore } from '../store';
 import type { SceneData } from '../types';
 import NodeHeader from './NodeHeader';
 import TagBar from './TagBar';
+import OnEnterSection from '../logic/OnEnterSection';
 
 type SceneNodeType = Node<SceneData, 'scene'>;
 
@@ -11,12 +12,10 @@ export default function SceneNode({ id, data, selected }: NodeProps<SceneNodeTyp
 
   return (
     <div
-      className={`min-w-[260px] max-w-[300px] bg-ink-800 border-2 rounded-lg shadow-lg ${
-        selected ? 'border-accent' : data.pinned ? 'border-accent-decision' : 'border-accent-scene'
-      }`}
+      className={`nf-node nf-kind-scene min-w-[260px] max-w-[300px] ${selected ? 'is-selected' : ''}`}
     >
       <Handle type="target" position={Position.Left} id="in" />
-      <NodeHeader id={id} icon="🎬" label="Scene" accentText="text-accent-scene" pinned={data.pinned} />
+      <NodeHeader id={id} kind="scene" label="Scene" pinned={data.pinned} />
       <div className="p-3 space-y-2">
         {/* Background — a framed setting box with the description nested inside */}
         <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">Background</label>
@@ -34,12 +33,13 @@ export default function SceneNode({ id, data, selected }: NodeProps<SceneNodeTyp
               value={data.description}
               onChange={(e) => updateNodeData(id, { description: e.target.value })}
               placeholder="Describe the setting..."
-              className="w-full bg-ink-900 border border-ink-600 text-white text-sm px-2 py-1.5 rounded focus:outline-none focus:border-accent-scene resize-y min-h-[60px] nodrag"
+              className="font-story w-full bg-ink-900 border border-ink-600 text-white text-sm px-2 py-1.5 rounded focus:outline-none focus:border-accent-scene resize-y min-h-[60px] nodrag"
               onMouseDown={(e) => e.stopPropagation()}
             />
           </div>
         </div>
         <TagBar id={id} tags={data.tags} accentBorder="focus:border-accent-scene" />
+        <OnEnterSection id={id} effects={data.onEnter} />
       </div>
       <Handle type="source" position={Position.Right} id="out" />
     </div>
