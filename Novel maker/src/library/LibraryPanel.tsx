@@ -6,7 +6,7 @@ import CharacterEditor from './CharacterEditor';
 import VariablesTab from './VariablesTab';
 import ScenesTab from './ScenesTab';
 import LibrarySearch, { NoMatches } from './LibrarySearch';
-import { filterCharacters } from './librarySearch';
+import { filterCharacters } from './libraryFilter';
 import { useFlowStore } from '../store';
 
 interface Props {

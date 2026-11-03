@@ -10,6 +10,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Never drift to 5174 when 5173 is busy: two servers would write the same saves folder.
+    strictPort: true,
     // Projects are written to ./saves — don't reload the page when they change.
     watch: { ignored: ['**/saves/**'] },
     open: true,

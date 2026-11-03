@@ -16,16 +16,19 @@ npm run dev
 
 Open http://localhost:5173. You land on the **Projects** home page — create a project, or click **Open the example** to load *The Lighthouse*.
 
-> After updating, run `npm install` once (new packages: fonts, icons, test runner). The launcher only installs when `node_modules` is missing.
+> After updating, the launchers install new packages by themselves (they run `npm install` whenever `node_modules` is missing or `package.json` gained packages).
 
 ### Windows: just double-click
 
-You don't need a terminal. Double-click one of these in this folder:
+You don't need a terminal. Two launchers in this folder:
 
-- **`Open Novel Flow.vbs`** — recommended. Starts the app with **no console window** and opens your browser automatically when it's ready. On the very first run it shows a small popup while it installs dependencies (1–2 minutes); after that it opens in a few seconds.
-- **`Open Novel Flow.bat`** — same thing via a `.bat` (a console window flashes briefly, then closes). It simply launches the `.vbs`.
-- **`Stop Novel Flow.bat`** — stops the running dev server (only the process on port 5173, so it won't touch other Node apps). You can also just close the browser tab and stop it later.
-- **`install-and-run.bat`** — the original launcher that keeps a visible console open (useful if you want to see server logs or errors).
+- **`Novel-flow.bat`** — the one launcher.
+  - **Not running:** installs / updates packages if needed (you see any errors), starts the app in a **minimized "Novel Flow server" window** on the taskbar and opens your browser. Close that window to stop the app.
+  - **Already running:** asks **[O] Open in browser** (default after 10 s) · **[R] Restart** · **[S] Stop**. It never starts a second server.
+  - From a terminal: `Novel-flow.bat start | stop | restart | test | check` — `test` runs the tests; `check` runs tests + typecheck + build.
+- **`Novel-flow.vbs`** — same start with **no window at all** (opens the browser when ready; if the app is already running it just opens the browser). Use `Novel-flow.bat` to stop it or to see errors. Note: Windows is phasing out VBScript, so if this stops working, use `Novel-flow.bat`.
+
+The app always runs on port **5173** (`strictPort`). Stop / restart only touch a Node process on that port, never other programs. The old launchers (`Open Novel Flow.*`, `Stop Novel Flow.bat`, `install-and-run.bat`) are in `_backup/old-launchers/`.
 
 All of these require [Node.js 18+](https://nodejs.org); the launcher will prompt you if it's missing.
 

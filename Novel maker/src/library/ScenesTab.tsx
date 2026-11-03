@@ -8,7 +8,7 @@ import { snapshotProject, useFlowStore } from '../store';
 import { sceneUsage } from '../analysis/scenes';
 import { confirmDialog, notify } from '../ui/dialogs';
 import LibrarySearch, { NoMatches } from './LibrarySearch';
-import { filterScenes } from './librarySearch';
+import { filterScenes } from './libraryFilter';
 
 function useUsage(): Map<string, number> {
   const nodes = useFlowStore((s) => s.nodes);

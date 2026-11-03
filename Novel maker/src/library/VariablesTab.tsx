@@ -5,7 +5,7 @@ import type { VarType } from '../types';
 import { variableUsage } from '../logic/usage';
 import { TYPE_LABEL, VarValueInput } from '../logic/fields';
 import LibrarySearch, { NoMatches } from './LibrarySearch';
-import { filterVariables } from './librarySearch';
+import { filterVariables } from './libraryFilter';
 
 const input =
   'bg-ink-900 border border-ink-600 text-white text-sm px-2 py-1 rounded focus:outline-none focus:border-accent-condition';

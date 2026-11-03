@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterCharacters, filterScenes, filterVariables, matchesQuery } from './librarySearch';
+import { filterCharacters, filterScenes, filterVariables, matchesQuery } from './libraryFilter';
 import { emptyCharacter, type SceneAsset } from './libraryTypes';
 import type { VariableDef } from '../types';
 
