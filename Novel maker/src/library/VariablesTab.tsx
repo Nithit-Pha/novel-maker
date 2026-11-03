@@ -4,12 +4,14 @@ import { useFlowStore } from '../store';
 import type { VarType } from '../types';
 import { variableUsage } from '../logic/usage';
 import { TYPE_LABEL, VarValueInput } from '../logic/fields';
+import LibrarySearch, { NoMatches } from './LibrarySearch';
+import { filterVariables } from './librarySearch';
 
 const input =
   'bg-ink-900 border border-ink-600 text-white text-sm px-2 py-1 rounded focus:outline-none focus:border-accent-condition';
 
 /** Library tab listing the story's variables (flags, counters, text). */
-export default function VariablesTab() {
+export default function VariablesTab({ query, onQuery }: { query: string; onQuery: (q: string) => void }) {
   const variables = useFlowStore((s) => s.variables);
   const addVariable = useFlowStore((s) => s.addVariable);
   const updateVariable = useFlowStore((s) => s.updateVariable);
@@ -26,6 +28,7 @@ export default function VariablesTab() {
     [graphs, nodes, activeArcId]
   );
 
+  const shown = filterVariables(variables, query);
   const names = variables.map((v) => v.name.trim());
   const isDup = (name: string) => names.filter((n) => n === name.trim()).length > 1;
 
@@ -47,7 +50,10 @@ export default function VariablesTab() {
     <div className="flex flex-col flex-1 min-h-0">
       <div className="px-4 py-3 border-b border-ink-600 flex-shrink-0 space-y-2">
         <button
-          onClick={() => addVariable('number')}
+          onClick={() => {
+            onQuery(''); // don't hide the new variable behind the search
+            addVariable('number');
+          }}
           className="nf-btn nf-btn-primary w-full h-9"
         >
           + Variable
@@ -57,12 +63,16 @@ export default function VariablesTab() {
           <code className="text-accent-condition">has_key</code>). Change them with effects on choices or nodes, and use
           them in choice conditions and Condition nodes.
         </p>
+        {variables.length > 0 && (
+          <LibrarySearch value={query} onChange={onQuery} placeholder="Search variables" shown={shown.length} total={variables.length} />
+        )}
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {variables.length === 0 && (
           <p className="text-sm text-ink-500 italic text-center mt-6">No variables yet.</p>
         )}
-        {variables.map((v) => {
+        {variables.length > 0 && shown.length === 0 && <NoMatches what="variables" query={query} />}
+        {shown.map((v) => {
           const used = usage[v.id] ?? 0;
           return (
             <div key={v.id} className="bg-ink-900 border border-ink-600 rounded-lg p-2.5 space-y-2">

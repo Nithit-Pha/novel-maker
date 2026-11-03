@@ -90,3 +90,37 @@ describe('saves API', () => {
     expect(r.status).toBe(404);
   });
 });
+
+describe('scene images', () => {
+  // 1×1 transparent PNG
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+  it('saves the scene list with the project and serves, then bins, images', async () => {
+    const c = await api('POST', '/', { name: 'Scenes test', story, characters: [], scenes: [] });
+    const name = c.json.name as string;
+    const put = await api('PUT', `/${encodeURIComponent(name)}/scenes/s1-a.png`, { data: PNG });
+    expect(put.status).toBe(200);
+    const img = await fetch(`${base}/${encodeURIComponent(name)}/scenes/s1-a.png`);
+    expect(img.status).toBe(200);
+    expect(img.headers.get('content-type')).toBe('image/png');
+    expect((await img.arrayBuffer()).byteLength).toBeGreaterThan(60);
+
+    const scenes = [{ id: 's1', name: 'Harbor', file: 's1-a.png' }];
+    await api('PUT', '/' + encodeURIComponent(name), { story, characters: [], scenes });
+    expect((await api('GET', '/' + encodeURIComponent(name))).json.scenes).toEqual(scenes);
+
+    expect((await api('DELETE', `/${encodeURIComponent(name)}/scenes/s1-a.png`)).status).toBe(200);
+    expect((await fetch(`${base}/${encodeURIComponent(name)}/scenes/s1-a.png`)).status).toBe(404);
+    await fs.access(path.join(root, name, 'scenes', '_deleted', 's1-a.png')); // kept, not erased
+  });
+
+  it('rejects path tricks, wrong types and mismatched extensions', async () => {
+    const name = (await api('POST', '/', { name: 'Scenes bad', story, characters: [] })).json.name as string;
+    const p = (f: string) => `/${encodeURIComponent(name)}/scenes/${encodeURIComponent(f)}`;
+    expect((await api('PUT', p('../x.png'), { data: PNG })).status).toBe(400);
+    expect((await api('PUT', p('x.gif'), { data: PNG })).status).toBe(400);
+    expect((await api('PUT', p('x.jpg'), { data: PNG })).status).toBe(400);
+    expect((await api('PUT', p('x.png'), { data: 'data:text/html;base64,PGI+' })).status).toBe(400);
+    expect((await api('GET', p('nope.png'))).status).toBe(404);
+  });
+});

@@ -1,0 +1,7 @@
+docs/scene-library-plan.md
+src/analysis/scenes.ts
+src/canvas/CanvasTools.tsx
+src/library/ScenePicker.tsx
+src/library/ScenesTab.tsx
+src/library/sceneStore.ts
+src/runtime/scenes.test.ts

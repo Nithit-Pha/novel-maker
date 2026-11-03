@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { flushSave, requestAutosave, setPersistTarget, useFlowStore } from '../store';
 import { useCharacterStore, readLegacyCharacters } from '../library/characterStore';
+import { useSceneStore } from '../library/sceneStore';
 import { migrateProject, emptyArc, type Project } from '../project';
 import { getBackend, type ProjectsBackend } from './projects';
 
@@ -15,6 +16,29 @@ interface SessionState {
 export const useSession = create<SessionState>(() => ({ current: null, backend: null }));
 
 let unsubscribeCharacters: (() => void) | null = null;
+
+/** Autosave target for a project: story + characters + scene list. */
+function persistTo(backend: ProjectsBackend, name: string) {
+  return async (p: Project) => {
+    await backend.save(
+      name,
+      { ...p, meta: { ...p.meta, title: name } },
+      useCharacterStore.getState().characters,
+      useSceneStore.getState().scenes
+    );
+  };
+}
+
+/** Point the Scene Library's image reads/writes at a project. */
+function sceneIo(backend: ProjectsBackend, project: string) {
+  useSceneStore.getState().setIo({
+    project,
+    files: backend.sceneFiles,
+    put: (n, f, d) => backend.putSceneImage(n, f, d),
+    remove: (n, f) => backend.removeSceneImage(n, f),
+    url: (n, f) => backend.sceneImageUrl(n, f),
+  });
+}
 
 /** A brand-new, empty story with one arc and one chapter. */
 export function blankProject(title: string): Project {
@@ -42,16 +66,22 @@ export async function openProject(name: string): Promise<void> {
   useFlowStore.getState().importJSON(JSON.stringify(project));
   useFlowStore.getState().setProjectTitle(rec.name);
   useCharacterStore.getState().replaceAll(rec.characters ?? []);
+  useSceneStore.getState().replaceAll(rec.scenes ?? []);
+  sceneIo(backend, rec.name);
 
   const projectName = rec.name;
-  setPersistTarget(async (p) => {
-    const b = useSession.getState().backend ?? backend;
-    await b.save(projectName, { ...p, meta: { ...p.meta, title: projectName } }, useCharacterStore.getState().characters);
-  });
+  setPersistTarget(persistTo(backend, projectName));
   unsubscribeCharacters?.();
-  unsubscribeCharacters = useCharacterStore.subscribe((s, prev) => {
+  const offCharacters = useCharacterStore.subscribe((s, prev) => {
     if (s.characters !== prev.characters) requestAutosave();
   });
+  const offScenes = useSceneStore.subscribe((s, prev) => {
+    if (s.scenes !== prev.scenes) requestAutosave();
+  });
+  unsubscribeCharacters = () => {
+    offCharacters();
+    offScenes();
+  };
   useSession.setState({ current: projectName, backend });
 }
 
@@ -62,6 +92,7 @@ export async function closeProject(): Promise<boolean> {
   unsubscribeCharacters?.();
   unsubscribeCharacters = null;
   setPersistTarget(null);
+  useSceneStore.getState().setIo(null);
   useSession.setState({ current: null });
   return ok;
 }
@@ -73,9 +104,8 @@ export function renamedOpenProject(from: string, to: string) {
   useFlowStore.getState().setProjectTitle(to);
   const backend = useSession.getState().backend;
   if (!backend) return;
-  setPersistTarget(async (p) => {
-    await backend.save(to, { ...p, meta: { ...p.meta, title: to } }, useCharacterStore.getState().characters);
-  });
+  setPersistTarget(persistTo(backend, to));
+  sceneIo(backend, to);
 }
 
 const MIGRATED_KEY = 'novel-flow-migrated-to-projects';

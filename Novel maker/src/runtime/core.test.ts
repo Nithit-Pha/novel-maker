@@ -12,6 +12,9 @@ import {
   findStart,
   next,
   pickOutcome,
+  loadSave,
+  restartArc,
+  startAt,
   startPlay,
   type PlayState,
   type StoryIndex,
@@ -206,5 +209,122 @@ describe('findStart', () => {
       []
     );
     expect(s!.id).toBe('c1');
+  });
+});
+
+describe('save points', () => {
+  const add = (n: number) => [{ id: 'fx', varId: 'n', op: 'add' as const, value: n }];
+  const story = buildIndex({
+    variables: [{ id: 'n', name: 'n', type: 'number', initial: 0 }],
+    arcs: [
+      {
+        id: 'A',
+        name: 'Act I',
+        nodes: [
+          { id: 'a1', type: 'chapter', position: { x: 0, y: 0 }, data: { kind: 'chapter', name: 'One' } },
+          { id: 'a2', type: 'dialog', data: { kind: 'dialog', onEnter: add(1), sceneId: 'night' } },
+          {
+            id: 'd',
+            type: 'decision',
+            data: { kind: 'decision', savePoint: true, onEnter: add(10), choices: [{ id: 'go', effects: add(100) }, { id: 'stay' }] },
+          },
+          { id: 'end1', type: 'end', data: { kind: 'end', savePoint: true } },
+          { id: 'P', type: 'portal', data: { kind: 'portal', targetArcId: 'B' } },
+        ],
+        edges: [
+          { source: 'a1', target: 'a2' },
+          { source: 'a2', target: 'd' },
+          { source: 'd', sourceHandle: 'choice-stay', target: 'end1' },
+          { source: 'd', sourceHandle: 'choice-go', target: 'P' },
+        ],
+      },
+      {
+        id: 'B',
+        name: 'Act II',
+        nodes: [
+          { id: 'cond', type: 'condition', position: { x: 0, y: 0 }, data: { kind: 'condition', branches: [], savePoint: true } },
+          { id: 'b1', type: 'scene', data: { kind: 'scene', onEnter: add(1000), sceneId: 'none' } },
+          { id: 'L', type: 'loop', data: { kind: 'loop', savePoint: true, items: [{ id: 'i1' }, { id: 'i2' }] } },
+          { id: 'x1', type: 'dialog', data: { kind: 'dialog' } },
+          { id: 'x2', type: 'dialog', data: { kind: 'dialog' } },
+          { id: 'end2', type: 'end', data: { kind: 'end' } },
+        ],
+        edges: [
+          { source: 'cond', sourceHandle: 'else', target: 'b1' },
+          { source: 'b1', target: 'L' },
+          { source: 'L', sourceHandle: 'item-i1', target: 'x1' },
+          { source: 'L', sourceHandle: 'item-i2', target: 'x2' },
+          { source: 'x1', target: 'L' },
+          { source: 'x2', target: 'L' },
+          { source: 'L', sourceHandle: 'done', target: 'end2' },
+        ],
+      },
+    ],
+  });
+  const toDecision = () => next(story, next(story, startPlay(story, 'A')));
+
+  it('records the arc start at the first card and no save before a save point', () => {
+    const s = startPlay(story, 'A');
+    expect(s.arcStart?.currentId).toBe('a1');
+    expect(s.save).toBeNull();
+    expect(next(story, s).arcStart).toBe(s.arcStart); // carried forward by reference
+  });
+
+  it('saves on arrival (after on-enter effects) and restores without re-applying them', () => {
+    const atD = toDecision();
+    expect(atD.currentId).toBe('d');
+    expect(atD.vars.n).toBe(11);
+    expect(atD.save?.currentId).toBe('d');
+    const ended = choose(story, atD, 'stay');
+    expect(ended.currentId).toBe('end1');
+    expect(ended.save).toBe(atD.save); // an End card is never a save point
+    const back = loadSave(ended);
+    expect(back.currentId).toBe('d');
+    expect(back.vars.n).toBe(11);
+    expect(back.scene).toBe('night');
+    expect(back.save).toBe(atD.save);
+    expect(back.arcStart).toBe(atD.arcStart);
+    // the choices still work from the restored state
+    expect(choose(story, back, 'go').vars.n).toBe(111 + 1000);
+  });
+
+  it('a portal starts a new arc; restarting it restores that arc start and the save in effect then', () => {
+    const inB = choose(story, toDecision(), 'go');
+    expect(inB.arcId).toBe('B');
+    expect(inB.currentId).toBe('b1'); // silent Condition (even flagged) is skipped
+    expect(inB.arcStart?.currentId).toBe('b1');
+    expect(inB.arcStart?.vars.n).toBe(1111);
+    expect(inB.save?.currentId).toBe('d'); // condition is not a save card
+    let s = next(story, inB); // → loop L (save point)
+    expect(s.save?.currentId).toBe('L');
+    s = next(story, enterItem(story, s, 'i1')); // back at L with i1 done → re-saved
+    expect(s.save?.progress.L).toEqual(['i1']);
+    s = next(story, enterItem(story, s, 'i2')); // loop done → end2
+    expect(s.currentId).toBe('end2');
+    expect(loadSave(s).progress.L).toEqual(['i1']);
+    const r = restartArc(story, s);
+    expect(r.arcId).toBe('B');
+    expect(r.currentId).toBe('b1');
+    expect(r.vars.n).toBe(1111);
+    expect(r.scene).toBeNull();
+    expect(r.save?.currentId).toBe('d');
+    expect(r.progress).toEqual({});
+  });
+
+  it('a save point that is also the arc start stays the save after restarting the arc', () => {
+    const s = startAt(story, 'A', 'd', { n: 5 });
+    expect(s.arcStart?.currentId).toBe('d');
+    expect(s.save?.currentId).toBe('d');
+    const r = restartArc(story, choose(story, s, 'stay'));
+    expect(r.currentId).toBe('d');
+    expect(r.save?.currentId).toBe('d');
+    expect(r.vars.n).toBe(15);
+  });
+
+  it('does nothing without a snapshot (old stories without save points)', () => {
+    const s = startPlay(story, 'B');
+    const noSave = { ...s, save: null, arcStart: null };
+    expect(loadSave(noSave)).toBe(noSave);
+    expect(restartArc(story, noSave)).toBe(noSave);
   });
 });

@@ -56,6 +56,12 @@ export interface PlayState {
   vars: Vars;
   /** Set while a revealed Chance result is on screen. */
   roll: { nodeId: string; outcomeId: string } | null;
+  /** Scene (background image) showing now, or null. Carried forward until a card changes it. */
+  scene: string | null;
+  /** Snapshot on arrival at the last save-point card reached (its own `save` is null). */
+  save: PlayState | null;
+  /** Snapshot on arrival at the first card of the current arc (its own `arcStart` is null). */
+  arcStart: PlayState | null;
 }
 
 export type Rng = () => number;
@@ -84,19 +90,44 @@ export function choiceState(choice: Choice, vars: Vars): { available: boolean; v
 export function pickOutcome(outcomes: ChanceOutcome[], rng?: Rng): ChanceOutcome | null;
 export function outcomeOdds(outcomes: ChanceOutcome[]): number[];
 
+export const NO_SCENE: 'none';
+export function sceneAfter(node: RtNode | null | undefined, current: string | null | undefined): string | null;
+
 export function buildIndex(story: StoryInput): StoryIndex;
 export function land(
   index: StoryIndex,
   arcId: string,
   rawId: string | null,
-  base: { callStack: CallFrame[]; progress: Record<string, string[]>; vars: Vars },
+  base: {
+    callStack: CallFrame[];
+    progress: Record<string, string[]>;
+    vars: Vars;
+    scene?: string | null;
+    save?: PlayState | null;
+    arcStart?: PlayState | null;
+    /** True when the player just entered the arc (its first stop becomes the arc start). */
+    enter?: boolean;
+  },
   rng?: Rng,
   pick?: ChancePick
 ): PlayState;
 export function startPlay(index: StoryIndex, startArcId: string, rng?: Rng, pick?: ChancePick): PlayState;
-export function startAt(index: StoryIndex, arcId: string, nodeId: string, vars?: Vars, rng?: Rng, pick?: ChancePick): PlayState;
+export function startAt(
+  index: StoryIndex,
+  arcId: string,
+  nodeId: string,
+  vars?: Vars,
+  rng?: Rng,
+  pick?: ChancePick,
+  scene?: string | null
+): PlayState;
 export function currentNode(index: StoryIndex, state: PlayState): RtNode | null;
 export function hasNext(index: StoryIndex, state: PlayState): boolean;
 export function next(index: StoryIndex, state: PlayState, rng?: Rng, pick?: ChancePick): PlayState;
 export function choose(index: StoryIndex, state: PlayState, choiceId: string, rng?: Rng, pick?: ChancePick): PlayState;
+export function canSavePoint(node: RtNode | null | undefined): boolean;
+export function isSavePoint(node: RtNode | null | undefined): boolean;
+export function loadSave(state: PlayState): PlayState;
+export function restartArc(index: StoryIndex, state: PlayState): PlayState;
+export function checkpointStep(states: PlayState[], cp: PlayState | null, field: 'save' | 'arcStart'): number;
 export function enterItem(index: StoryIndex, state: PlayState, itemId: string, rng?: Rng, pick?: ChancePick): PlayState;

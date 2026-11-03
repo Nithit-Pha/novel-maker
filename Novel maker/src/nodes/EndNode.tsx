@@ -5,7 +5,7 @@ import NodeHeader from './NodeHeader';
 import TagBar from './TagBar';
 import OnEnterSection from '../logic/OnEnterSection';
 import { stop } from '../logic/fields';
-import { useCharacterStore } from '../library/characterStore';
+import CharacterField from '../library/CharacterField';
 
 type EndNodeType = Node<EndData, 'end'>;
 
@@ -15,8 +15,6 @@ const field =
 /** An ending. Every field is optional; it has no outgoing wire. */
 export default function EndNode({ id, data, selected }: NodeProps<EndNodeType>) {
   const updateNodeData = useFlowStore((s) => s.updateNodeData);
-  const characters = useCharacterStore((s) => s.characters);
-  const listId = `end-chars-${id}`;
 
   return (
     <div className={`nf-node nf-kind-end min-w-[260px] max-w-[300px] ${selected ? 'is-selected' : ''}`}>
@@ -45,19 +43,13 @@ export default function EndNode({ id, data, selected }: NodeProps<EndNodeType>) 
         </div>
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">Character (optional)</label>
-          <input
+          <CharacterField
             value={data.character ?? ''}
-            onChange={(e) => updateNodeData(id, { character: e.target.value })}
+            characterId={data.characterId}
+            onChange={(character, characterId) => updateNodeData(id, { character, characterId })}
             placeholder="Who speaks last?"
-            list={listId}
-            className={field}
-            onMouseDown={stop}
+            className={field.replace('w-full ', '')}
           />
-          <datalist id={listId}>
-            {characters.map((c) => (
-              <option key={c.id} value={c.name} />
-            ))}
-          </datalist>
         </div>
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">Dialogue (optional)</label>

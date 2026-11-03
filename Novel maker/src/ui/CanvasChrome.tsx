@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Panel, useReactFlow, useViewport } from '@xyflow/react';
 import {
+  Captions,
   CircleHelp,
   LayoutGrid,
   Lock,
@@ -15,9 +16,11 @@ import {
   Settings,
   Sun,
   Unlock,
+  Wand2,
   X,
 } from 'lucide-react';
 import { useView } from './viewPrefs';
+import { tidyArc } from '../canvas/layout';
 import { useTheme, type ThemeMode } from './theme';
 import Dropdown from './Dropdown';
 import { NODE_ICONS } from './icons';
@@ -26,6 +29,7 @@ import type { NodeKind } from '../types';
 export function LeftRail({ onHome, onHelp }: { onHome: () => void; onHelp: () => void }) {
   const minimap = useView((s) => s.minimap);
   const grid = useView((s) => s.grid);
+  const labels = useView((s) => s.labels);
   const set = useView((s) => s.set);
   const mode = useTheme((s) => s.mode);
   const setMode = useTheme((s) => s.setMode);
@@ -88,6 +92,10 @@ export function LeftRail({ onHome, onHelp }: { onHome: () => void; onHelp: () =>
               <input type="checkbox" checked={grid} onChange={(e) => set({ grid: e.target.checked })} className="accent-[rgb(var(--accent))]" />
             </label>
             <label className="flex items-center justify-between text-[13px] text-fg-soft cursor-pointer">
+              Wire labels
+              <input type="checkbox" checked={labels} onChange={(e) => set({ labels: e.target.checked })} className="accent-[rgb(var(--accent))]" />
+            </label>
+            <label className="flex items-center justify-between text-[13px] text-fg-soft cursor-pointer">
               Minimap
               <input type="checkbox" checked={minimap} onChange={(e) => set({ minimap: e.target.checked })} className="accent-[rgb(var(--accent))]" />
             </label>
@@ -107,6 +115,8 @@ export function ZoomControls() {
   const { zoom } = useViewport();
   const locked = useView((s) => s.locked);
   const setLocked = useView((s) => s.setLocked);
+  const labels = useView((s) => s.labels);
+  const setView = useView((s) => s.set);
   return (
     <Panel position="bottom-right">
       <div className="flex items-center gap-0.5 p-1 bg-surface border border-border rounded-xl" style={{ boxShadow: 'var(--shadow-md)' }}>
@@ -124,6 +134,23 @@ export function ZoomControls() {
           <Plus size={15} />
         </button>
         <div className="w-px h-5 bg-border mx-0.5" />
+        <button
+          className={`nf-icon-btn !w-7 !h-7 ${labels ? '!text-accent' : ''}`}
+          onClick={() => setView({ labels: !labels })}
+          title={labels ? 'Hide wire labels' : 'Show wire labels (choice text on wires)'}
+          aria-pressed={labels}
+          aria-label="Wire labels"
+        >
+          <Captions size={15} />
+        </button>
+        <button
+          className="nf-icon-btn !w-7 !h-7"
+          onClick={() => tidyArc(rf)}
+          title="Tidy: arrange cards left → right (only the selected cards if 2+ are selected)"
+          aria-label="Tidy"
+        >
+          <Wand2 size={15} />
+        </button>
         <button className="nf-icon-btn !w-7 !h-7" onClick={() => rf.fitView({ padding: 0.2, duration: 300, maxZoom: 1 })} title="Fit to screen" aria-label="Fit to screen">
           <Maximize size={14} />
         </button>
@@ -176,6 +203,12 @@ const SHORTCUTS: [string, string][] = [
   ['Ctrl / ⌘ + Shift + Z  ·  Ctrl + Y', 'Redo'],
   ['Ctrl / ⌘ + K', 'Search nodes & pins'],
   ['Delete / Backspace', 'Delete selected node or wire'],
+  ['H', 'Hand tool: drag empty canvas to move around'],
+  ['V', 'Select tool: drag empty canvas to select cards'],
+  ['Hold Space', 'Move around while using Select'],
+  ['Shift + drag', 'Draw a selection box (any tool)'],
+  ['Ctrl / ⌘ + click', 'Add a card to the selection'],
+  ['Esc', 'Clear the selection'],
   ['?', 'This help'],
   ['Run mode: Space or →', 'Next card'],
   ['Run mode: ← or Backspace', 'Back'],
@@ -225,6 +258,8 @@ export function HelpSheet({ onClose }: { onClose: () => void }) {
               <li>Use <b>Library → Variables</b> to remember choices, then lock choices (🔒) or route with a Condition node.</li>
               <li>Projects autosave a moment after every change. The dot next to Undo/Redo shows the save state.</li>
               <li>Pin important cards and press Ctrl+K to jump to them.</li>
+              <li>Add background images in <b>Library → Scenes</b>, then pick one with the 🖼 button on any card. It stays on screen until another card changes it.</li>
+              <li>Select several cards (Select tool, or Shift+drag) to set their scene, tag, tidy or delete them in one go.</li>
             </ul>
           )}
         </div>

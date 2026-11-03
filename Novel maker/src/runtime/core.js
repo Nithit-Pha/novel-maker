@@ -251,6 +251,42 @@ export function outcomeOdds(outcomes) {
 }
 
 // ---------------------------------------------------------------------------
+// Scenes (background images)
+// ---------------------------------------------------------------------------
+
+/** sceneId value that clears the background. An empty / missing sceneId keeps it. */
+export var NO_SCENE = 'none';
+
+/** The background after arriving at `node`, given the one showing before. */
+export function sceneAfter(node, current) {
+  var id = node && node.data && node.data.sceneId;
+  if (!id) return current == null ? null : current;
+  return id === NO_SCENE ? null : id;
+}
+
+// ---------------------------------------------------------------------------
+// Save points
+// ---------------------------------------------------------------------------
+
+var SAVE_KINDS = { chapter: 1, scene: 1, dialog: 1, decision: 1, loop: 1 };
+
+/** Whether a card can be a save point (cards the reader stops on; a Chance only when it reveals). */
+export function canSavePoint(node) {
+  if (!node) return false;
+  if (SAVE_KINDS[node.type]) return true;
+  return node.type === 'chance' && !!node.data && node.data.show === 'reveal';
+}
+
+/** Whether a card is an active save point. */
+export function isSavePoint(node) {
+  return canSavePoint(node) && !!node.data.savePoint;
+}
+
+function snapshot(state, over) {
+  return Object.assign({}, state, over);
+}
+
+// ---------------------------------------------------------------------------
 // Playback
 // ---------------------------------------------------------------------------
 
@@ -297,18 +333,32 @@ export function land(index, arcId, rawId, base, rng, pick) {
   });
   var prog = cloneProgress(base.progress || {});
   var vars = Object.assign({}, base.vars || {});
+  var scene = base.scene == null ? null : base.scene;
+  var save = base.save || null;
+  var arcStart = base.arcStart || null;
+  var entered = !!base.enter; // just arrived in an arc → the next stop is its start
   var id = rawId;
   var guard = 0;
 
+  // Snapshots are taken on arrival, after on-enter effects, so going back never
+  // applies them twice. A save snapshot keeps the arc start in effect then (its own
+  // `save` is null = itself); an arc-start snapshot keeps the save in effect then.
   function out(cur, roll) {
-    return {
+    var s = {
       arcId: arc ? arc.id : arcId,
       currentId: cur,
       callStack: cs,
       progress: prog,
       vars: vars,
       roll: roll || null,
+      scene: scene,
+      save: save,
+      arcStart: arcStart,
     };
+    if (cur == null || !arc) return s;
+    if (entered) s.arcStart = snapshot(s, { arcStart: null });
+    if (isSavePoint(arc.map[cur])) s.save = snapshot(s, { save: null });
+    return s;
   }
 
   if (!arc) return out(null);
@@ -320,6 +370,7 @@ export function land(index, arcId, rawId, base, rng, pick) {
     var d = node.data || {};
 
     if (d.onEnter && d.onEnter.length) vars = applyEffects(d.onEnter, vars);
+    scene = sceneAfter(node, scene);
 
     if (node.type === 'loop') {
       var top = cs[cs.length - 1];
@@ -338,6 +389,7 @@ export function land(index, arcId, rawId, base, rng, pick) {
       var target = d.targetArcId ? index.arcs[d.targetArcId] : null;
       if (!target) return out(null);
       arc = target;
+      entered = true;
       var st = findStart(target.nodes, target.edges);
       id = st ? st.id : null;
       continue;
@@ -372,18 +424,37 @@ export function land(index, arcId, rawId, base, rng, pick) {
 /** Fresh playthrough from the start of `startArcId` (or the first arc). */
 export function startPlay(index, startArcId, rng, pick) {
   var arcId = index.arcs[startArcId] ? startArcId : index.order[0];
-  var base = { callStack: [], progress: {}, vars: initialVars(index.variables) };
+  var base = { callStack: [], progress: {}, vars: initialVars(index.variables), scene: null, enter: true };
   var arc = index.arcs[arcId];
   if (!arc) {
-    return { arcId: startArcId, currentId: null, callStack: [], progress: {}, vars: base.vars, roll: null };
+    return {
+      arcId: startArcId,
+      currentId: null,
+      callStack: [],
+      progress: {},
+      vars: base.vars,
+      roll: null,
+      scene: null,
+      save: null,
+      arcStart: null,
+    };
   }
   var st = findStart(arc.nodes, arc.edges);
   return land(index, arcId, st ? st.id : null, base, rng, pick);
 }
 
-/** Start playing at a specific card ("Play from here") with given variable values. */
-export function startAt(index, arcId, nodeId, vars, rng, pick) {
-  var base = { callStack: [], progress: {}, vars: Object.assign(initialVars(index.variables), vars || {}) };
+/**
+ * Start playing at a specific card ("Play from here") with given variable values
+ * and, optionally, the background that would be showing when the reader got there.
+ */
+export function startAt(index, arcId, nodeId, vars, rng, pick, scene) {
+  var base = {
+    callStack: [],
+    progress: {},
+    vars: Object.assign(initialVars(index.variables), vars || {}),
+    scene: scene == null ? null : scene,
+    enter: true,
+  };
   return land(index, arcId, nodeId, base, rng, pick);
 }
 
@@ -400,6 +471,9 @@ function ended(state, vars) {
     progress: state.progress,
     vars: vars || state.vars,
     roll: null,
+    scene: state.scene == null ? null : state.scene,
+    save: state.save || null,
+    arcStart: state.arcStart || null,
   };
 }
 
@@ -441,6 +515,9 @@ export function choose(index, state, choiceId, rng, pick) {
     progress: state.progress,
     vars: vars,
     roll: null,
+    scene: state.scene,
+    save: state.save || null,
+    arcStart: state.arcStart || null,
   };
   return t ? land(index, state.arcId, t, base, rng, pick) : ended(state, vars);
 }
@@ -459,6 +536,38 @@ export function enterItem(index, state, itemId, rng, pick) {
     progress: state.progress,
     vars: state.vars,
     roll: null,
+    scene: state.scene,
+    save: state.save || null,
+    arcStart: state.arcStart || null,
   };
   return land(index, state.arcId, t, base, rng, pick);
+}
+
+/** Back to the last save point reached, exactly as it was then. No save → unchanged. */
+export function loadSave(state) {
+  var cp = state && state.save;
+  if (!cp) return state;
+  return snapshot(cp, { save: cp });
+}
+
+/** Back to the first card of the current arc, exactly as it was then. No arc start → unchanged. */
+export function restartArc(index, state) {
+  var cp = state && state.arcStart;
+  if (!cp) return state;
+  var arc = index.arcs[cp.arcId];
+  var node = arc && cp.currentId ? arc.map[cp.currentId] : null;
+  // The arc's first card is itself a save point → it is the save again.
+  var save = isSavePoint(node) ? snapshot(cp, { save: null, arcStart: cp }) : cp.save || null;
+  return snapshot(cp, { arcStart: cp, save: save });
+}
+
+/**
+ * Players keep a history of states. The step where checkpoint `cp` was made is
+ * the first state whose `field` ('save' or 'arcStart') is that same object; going
+ * back rewinds to it. -1 when it isn't in the history.
+ */
+export function checkpointStep(states, cp, field) {
+  if (!cp) return -1;
+  for (var i = 0; i < states.length; i++) if (states[i] && states[i][field] === cp) return i;
+  return -1;
 }

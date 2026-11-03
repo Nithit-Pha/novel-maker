@@ -24,6 +24,7 @@ import {
   Sun,
   Undo2,
   Upload,
+  Wand2,
 } from 'lucide-react';
 import { flushSave, useFlowStore } from './store';
 import type { NodeKind } from './types';
@@ -33,9 +34,13 @@ import { NODE_ICONS, NODE_LABELS } from './ui/icons';
 import { useTheme } from './ui/theme';
 import { confirmDialog, notify } from './ui/dialogs';
 import { useCharacterStore } from './library/characterStore';
-import { buildStoryHtml } from './export/exportHtml';
+import { buildStoryHtml, type ExportScene } from './export/exportHtml';
+import { sceneDataUrl, useSceneStore } from './library/sceneStore';
+import { sceneUsage } from './analysis/scenes';
+import type { Project } from './project';
 import { useSession } from './storage/session';
 import { useUi } from './ui/uiStore';
+import { tidyArc } from './canvas/layout';
 
 interface Props {
   onPlay: () => void;
@@ -115,6 +120,8 @@ export default function Toolbar({
     addNode(kind, { x: centerX - 130 + jitter(), y: centerY - 80 + jitter() });
   };
 
+  const handleTidy = () => tidyArc(reactFlow);
+
   const handleClear = async () => {
     const ok = await confirmDialog({
       title: 'Clear the whole canvas?',
@@ -139,8 +146,26 @@ export default function Toolbar({
         confirmLabel: 'Import',
       });
       if (!ok) return;
-      if (importJSON(String(ev.target?.result ?? ''))) notify('Story imported');
-      else notify('That file is not a valid Novel Flow story (JSON).', 'error');
+      const text = String(ev.target?.result ?? '');
+      if (!importJSON(text)) {
+        notify('That file is not a valid Novel Flow story (JSON).', 'error');
+        return;
+      }
+      // Files exported with scenes carry their images: add them to the Library.
+      let scenes: unknown = null;
+      try {
+        scenes = JSON.parse(text)?.scenes;
+      } catch {
+        /* already checked above */
+      }
+      if (Array.isArray(scenes) && scenes.length) {
+        try {
+          const n = await useSceneStore.getState().importScenes(scenes);
+          notify(n ? `Story imported with ${n} scene${n === 1 ? '' : 's'}` : 'Story imported');
+        } catch (err) {
+          notify(`Story imported, but some scenes could not be added: ${(err as Error).message}`, 'error');
+        }
+      } else notify('Story imported');
     };
     reader.readAsText(file);
   };
@@ -152,16 +177,50 @@ export default function Toolbar({
     else notify(useFlowStore.getState().saveError ?? 'Could not save.', 'error');
   };
 
-  const handleExportJson = () => download(`${slug(title)}.json`, exportJSON(), 'application/json');
+  /** Scenes the story uses, with their images as data URLs (exports must work on their own). */
+  const usedScenes = async (project: Project, all = false): Promise<ExportScene[]> => {
+    const used = sceneUsage(project);
+    const list = useSceneStore.getState().scenes.filter((x) => all || used.has(x.id));
+    const out: ExportScene[] = [];
+    for (const sc of list) out.push({ id: sc.id, name: sc.name, src: await sceneDataUrl(sc) });
+    return out;
+  };
 
-  const handleExportHtml = () => {
+  const handleExportJson = async () => {
+    const scenes = useSceneStore.getState().scenes;
+    if (scenes.length === 0) return download(`${slug(title)}.json`, exportJSON(), 'application/json');
+    try {
+      const data = JSON.parse(exportJSON());
+      const withImages = await usedScenes(data as Project, true);
+      data.scenes = scenes.map((sc) => ({
+        id: sc.id,
+        name: sc.name,
+        width: sc.width,
+        height: sc.height,
+        createdAt: sc.createdAt,
+        data: withImages.find((x) => x.id === sc.id)?.src ?? '',
+      }));
+      download(`${slug(title)}.json`, JSON.stringify(data, null, 2), 'application/json');
+    } catch (err) {
+      notify(`Could not export the scenes: ${(err as Error).message}`, 'error');
+    }
+  };
+
+  const handleExportHtml = async () => {
     const project = useFlowStore.getState().getProject();
+    let scenes: ExportScene[] = [];
+    try {
+      scenes = await usedScenes(project);
+    } catch (err) {
+      notify(`Exported without some backgrounds: ${(err as Error).message}`, 'error');
+    }
     const html = buildStoryHtml({
       arcs: project.arcs,
       startArcId: project.activeArcId,
       characters: useCharacterStore.getState().characters,
       variables: project.variables,
       title: project.meta.title,
+      scenes,
     });
     download(`${slug(title)}.html`, html, 'text/html');
   };
@@ -230,7 +289,7 @@ export default function Toolbar({
               title={q.kind === 'chapter' ? 'Add a chapter start' : `Add a ${q.label.toLowerCase()} node`}
             >
               <Icon size={15} className="text-node" />
-              {q.label}
+              <span className="hidden min-[1440px]:inline">{q.label}</span>
             </button>
           );
         })}
@@ -241,7 +300,7 @@ export default function Toolbar({
           <button onClick={toggle} className={`nf-btn nf-btn-outline ${open ? 'nf-btn-active' : ''}`} title="Add a node">
             <Plus size={15} />
             <span className="hidden sm:inline xl:hidden">Add</span>
-            <span className="hidden xl:inline">More</span>
+            <span className="hidden min-[1440px]:inline">More</span>
             <ChevronDown size={14} className="opacity-60" />
           </button>
         )}
@@ -313,7 +372,6 @@ export default function Toolbar({
         title={problemCount ? `Story check — ${problemCount} problem${problemCount === 1 ? '' : 's'}` : 'Story check — problems & routes'}
       >
         <ListChecks size={16} />
-        <span className="hidden 2xl:inline">Check</span>
         {problemCount > 0 && (
           <span
             className={`absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-semibold flex items-center justify-center text-surface ${
@@ -326,14 +384,12 @@ export default function Toolbar({
       </button>
       <button onClick={onOpenSearch} className="nf-btn hidden md:inline-flex" title="Search nodes (Ctrl+K)">
         <Search size={16} />
-        <span className="hidden 2xl:inline">Search</span>
       </button>
       <div className="hidden md:block">
         <TagFilter activeTags={activeTags} onChange={onChangeTags} />
       </div>
-      <button onClick={onToggleLibrary} className={`nf-btn hidden md:inline-flex ${libraryOpen ? 'nf-btn-active' : ''}`} title="Characters & variables">
+      <button onClick={onToggleLibrary} className={`nf-btn hidden md:inline-flex ${libraryOpen ? 'nf-btn-active' : ''}`} title="Library: characters, scenes & variables">
         <Library size={16} />
-        <span className="hidden 2xl:inline">Library</span>
       </button>
       <button
         onClick={toggleTheme}
@@ -345,7 +401,7 @@ export default function Toolbar({
       </button>
       <button onClick={() => reactFlow.fitView({ padding: 0.2, duration: 300, maxZoom: 1 })} className="nf-btn hidden lg:inline-flex" title="Fit the story on screen">
         <Maximize size={15} />
-        <span className="hidden 2xl:inline">Fit</span>
+        <span className="hidden min-[1680px]:inline">Fit</span>
       </button>
       {divider}
 
@@ -357,7 +413,7 @@ export default function Toolbar({
         trigger={({ toggle, open }) => (
           <button onClick={toggle} className={`nf-btn ${open ? 'nf-btn-active' : ''}`} title="Export">
             <Download size={15} />
-            <span className="hidden xl:inline">Export</span>
+            <span className="hidden min-[1440px]:inline">Export</span>
             <ChevronDown size={13} className="opacity-60" />
           </button>
         )}
@@ -371,7 +427,7 @@ export default function Toolbar({
       </Dropdown>
       <button onClick={handleImport} className="nf-btn hidden md:inline-flex" title="Import a story file (.json) into this project">
         <Upload size={15} />
-        <span className="hidden xl:inline">Import</span>
+        <span className="hidden min-[1440px]:inline">Import</span>
       </button>
       <button
         onClick={() => void handleSave()}
@@ -422,6 +478,7 @@ export default function Toolbar({
                 <MenuItem icon={<Redo2 size={15} />} label="Redo" onClick={run(redo)} />
               </div>
               <div className="nf-menu-sep" />
+              <MenuItem icon={<Wand2 size={15} />} label="Tidy (auto-layout)" onClick={run(handleTidy)} />
               <MenuItem icon={<FolderOutput size={15} />} label="Save a copy to another folder…" onClick={run(onOpenSaves)} />
               <MenuItem icon={<Keyboard size={15} />} label="Keyboard shortcuts" hint="?" onClick={run(onShowHelp)} />
               <MenuItem icon={<BookMarked size={15} />} label="Help & tips" onClick={run(onShowHelp)} />

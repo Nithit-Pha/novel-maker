@@ -4,6 +4,11 @@ import { useStoryAnalysis } from './analysis/useAnalysis';
 import type { Route } from './analysis/explore';
 import { VarValueInput } from './logic/fields';
 import { initialVars, type Vars } from './engine';
+import { sceneBefore } from './analysis/scenes';
+import NfEdge from './canvas/NfEdge';
+import DropMenu from './canvas/DropMenu';
+import { wireLabel } from './canvas/wireLabels';
+import type { EdgeTypes, FinalConnectionState } from '@xyflow/react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -11,9 +16,11 @@ import {
   MiniMap,
   BackgroundVariant,
   useReactFlow,
+  SelectionMode,
   type Edge,
   type NodeTypes,
 } from '@xyflow/react';
+import { SelectionBar, ToolSwitch } from './canvas/CanvasTools';
 import { Loader2 } from 'lucide-react';
 import { useFlowStore } from './store';
 import type { Project } from './project';
@@ -41,6 +48,9 @@ import { useView } from './ui/viewPrefs';
 import { useUi } from './ui/uiStore';
 import { goHome, goProject, useRoute } from './ui/router';
 import { closeProject, openProject, useSession } from './storage/session';
+
+/** Every wire uses NfEdge (curve + optional choice label); it replaces React Flow's default. */
+const edgeTypes: EdgeTypes = { default: NfEdge };
 
 const nodeTypes: NodeTypes = {
   chapter: ChapterNode,
@@ -80,11 +90,16 @@ function FlowCanvas() {
   const grid = useView((s) => s.grid);
   const minimap = useView((s) => s.minimap);
   const locked = useView((s) => s.locked);
+  const tool = useView((s) => s.tool);
   const hot = useUi((s) => s.hot);
   const reactFlow = useReactFlow();
 
-  const [play, setPlay] = useState<{ project: Project; start?: { arcId: string; nodeId: string; vars: Vars }; route?: Route } | null>(null);
-  const [startFrom, setStartFrom] = useState<{ arcId: string; nodeId: string; vars: Vars } | null>(null);
+  const [play, setPlay] = useState<{
+    project: Project;
+    start?: { arcId: string; nodeId: string; vars: Vars; scene?: string | null };
+    route?: Route;
+  } | null>(null);
+  const [startFrom, setStartFrom] = useState<{ arcId: string; nodeId: string; vars: Vars; scene?: string | null } | null>(null);
   const checkOpen = useUi((s) => s.checkOpen);
   const focus = useUi((s) => s.focus);
   const playFrom = useUi((s) => s.playFrom);
@@ -118,9 +133,12 @@ function FlowCanvas() {
   useEffect(() => {
     if (!playFrom) return;
     useUi.getState().requestPlayFrom(null);
-    const vars = initialVars(useFlowStore.getState().variables);
-    if (useFlowStore.getState().variables.length === 0) setPlay({ project: getProject(), start: { ...playFrom, vars } });
-    else setStartFrom({ ...playFrom, vars });
+    const st = useFlowStore.getState();
+    const vars = initialVars(st.variables);
+    // Start with the background the reader would see arriving here.
+    const scene = sceneBefore(st.nodes, st.edges, playFrom.nodeId);
+    if (st.variables.length === 0) setPlay({ project: getProject(), start: { ...playFrom, vars, scene } });
+    else setStartFrom({ ...playFrom, vars, scene });
   }, [playFrom, getProject]);
 
   // "Play this route" from the Routes tab.
@@ -134,6 +152,44 @@ function FlowCanvas() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [activeTags, setActiveTags] = useState<string[]>([]);
+  const addNodeConnected = useFlowStore((s) => s.addNodeConnected);
+  /** A wire dropped on empty canvas: where, and which handle it came from. */
+  const [drop, setDrop] = useState<{
+    x: number;
+    y: number;
+    flow: { x: number; y: number };
+    from: { nodeId: string; handleId: string | null; handleType: 'source' | 'target' };
+  } | null>(null);
+
+  const onConnectEnd = (event: MouseEvent | TouchEvent, state: FinalConnectionState) => {
+    if (state.isValid || !state.fromNode || !state.fromHandle || locked) return;
+    const point = 'changedTouches' in event ? event.changedTouches[0] : event;
+    // Only when dropped on empty canvas: not on a card, a panel or the toolbar.
+    const hit = document.elementsFromPoint(point.clientX, point.clientY);
+    if (!hit[0]?.closest('.react-flow') || hit.some((el) => el.closest('.react-flow__node, .react-flow__panel'))) return;
+    setDrop({
+      x: point.clientX,
+      y: point.clientY,
+      flow: reactFlow.screenToFlowPosition({ x: point.clientX, y: point.clientY }),
+      from: { nodeId: state.fromNode.id, handleId: state.fromHandle.id ?? null, handleType: state.fromHandle.type },
+    });
+  };
+
+  const createAtDrop = (kind: NodeKind) => {
+    if (!drop) return;
+    const pos =
+      drop.from.handleType === 'source' ? { x: drop.flow.x + 8, y: drop.flow.y - 34 } : { x: drop.flow.x - 290, y: drop.flow.y - 34 };
+    addNodeConnected(kind, pos, drop.from);
+    setDrop(null);
+    // If the new card lands (partly) off screen, scroll so it's visible.
+    const { zoom } = reactFlow.getViewport();
+    const tl = reactFlow.flowToScreenPosition(pos);
+    const w = 300 * zoom;
+    const h = 260 * zoom;
+    if (tl.x < 60 || tl.y < 120 || tl.x + w > window.innerWidth - 20 || tl.y + h > window.innerHeight - 20) {
+      reactFlow.setCenter(pos.x + 150, pos.y + 130, { zoom, duration: 300 });
+    }
+  };
 
   const startPlay = () => {
     setPlay({ project: getProject() });
@@ -167,12 +223,14 @@ function FlowCanvas() {
   // Wires are tinted by their source node; the hovered choice's wire is highlighted.
   // View-only: edge data in the store is untouched.
   const displayEdges = useMemo<Edge[]>(() => {
-    const kindOf = new Map(nodes.map((n) => [n.id, n.type ?? '']));
+    const byId = new Map(nodes.map((n) => [n.id, n]));
     return edges.map((e) => {
-      const token = KIND_TOKEN[kindOf.get(e.source) ?? ''];
-      const isHot = hot && e.source === hot.nodeId && (e.sourceHandle || 'out') === hot.handle;
+      const src = byId.get(e.source);
+      const token = KIND_TOKEN[src?.type ?? ''];
+      const isHot = !!hot && e.source === hot.nodeId && (e.sourceHandle || 'out') === hot.handle;
       return {
         ...e,
+        data: { ...e.data, wireLabel: wireLabel(src, e.sourceHandle), hot: isHot },
         className: isHot ? 'nf-edge-hot' : undefined,
         style: token ? ({ ...e.style, '--edge-color': `var(--${token})` } as React.CSSProperties) : e.style,
         zIndex: isHot ? 10 : e.zIndex,
@@ -206,11 +264,18 @@ function FlowCanvas() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onConnectEnd={onConnectEnd}
           onNodeDragStart={() => commitDrag()}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           nodesDraggable={!locked}
           nodesConnectable={!locked}
           elementsSelectable={!locked}
+          // Hand: drag empty canvas to pan. Select: drag draws a selection box,
+          // middle-drag or holding Space pans. Shift+drag box-selects in both.
+          panOnDrag={tool === 'select' && !locked ? [1] : true}
+          selectionOnDrag={tool === 'select' && !locked}
+          selectionMode={SelectionMode.Partial}
           fitView
           fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
           minZoom={0.15}
@@ -233,9 +298,20 @@ function FlowCanvas() {
           )}
         </ReactFlow>
         <LeftRail onHome={() => void leave()} onHelp={() => setHelpOpen(true)} />
+        {!locked && <ToolSwitch />}
+        <SelectionBar />
         {nodes.length === 0 && <EmptyCanvas onAdd={addAtCenter} />}
         {libraryOpen && !checkOpen && <LibraryPanel onClose={() => setLibraryOpen(false)} />}
         {checkOpen && <StoryCheckPanel />}
+        {drop && (
+          <DropMenu
+            x={drop.x}
+            y={drop.y}
+            direction={drop.from.handleType === 'source' ? 'after' : 'before'}
+            onPick={createAtDrop}
+            onClose={() => setDrop(null)}
+          />
+        )}
         {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} />}
       </div>
       {savesOpen && <SavesPanel onClose={() => setSavesOpen(false)} />}

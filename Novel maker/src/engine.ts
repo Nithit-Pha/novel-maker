@@ -21,6 +21,8 @@ export {
   pickOutcome,
   outcomeOdds,
   buildIndex,
+  NO_SCENE,
+  sceneAfter,
   land,
   startPlay,
   startAt,
@@ -29,6 +31,11 @@ export {
   next,
   choose,
   enterItem,
+  canSavePoint,
+  isSavePoint,
+  loadSave,
+  restartArc,
+  checkpointStep,
 } from './runtime/core.js';
 
 export type { CallFrame, PlayState, StoryIndex, Vars, Rng, ChancePick, RtNode, RtEdge } from './runtime/core.js';

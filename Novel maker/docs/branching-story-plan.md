@@ -109,13 +109,21 @@ interface CommonNodeData { …; onEnter?: Effect[] }   // e.g. "visited_library 
 
 ---
 
-## Phase 3 — Usability (≈ 1 week)
+## Phase 3 — Usability ✅ done (2026-11-03)
 
 1. **Drag a wire into empty space** → node-type menu → node is created at the drop point, already connected (React Flow `onConnectEnd`).
 2. **Wire labels**: choice / branch / outcome text on edges (truncated, toolbar toggle).
 3. **Auto-layout** (dagre, left → right) for the arc or the selection; one undo step.
 4. **Speaker dropdown** in Dialog nodes from the Character Library (free text still allowed; store optional `characterId`).
 5. **In-app dialogs and toasts** replacing `alert()` / `confirm()` (import errors, delete confirmations).
+
+**Result (2026-11-03)**
+1. Drag a wire into empty space → menu "Add next card" (all 9 kinds) at the drop point; from an *input* the menu offers "Add a card before" (Chapter / Scene / Dialogue). The new card is wired at once, replaces an existing wire on that output, is one undo step, and the canvas scrolls to it if it lands off screen.
+2. Wire labels (choice "1 · Let her in", branch, Else, outcome with %, loop item, All done) sit next to the output they leave; hidden below 45 % zoom. Toggle: bottom-right zoom control and ⚙ Settings (instead of the crowded toolbar).
+3. **Tidy** (wand in the zoom control, and ⋯ menu): dagre left → right, 180 px between columns so labels fit, choices kept in order; only the selected cards when 2+ are selected; keeps the story's top-left corner; one undo step.
+4. Speaker field (Dialogue and Ending cards): suggestions from the Character Library with portrait, links the card (`characterId`), "Add to Library" for a new name; renaming a character in the Library renames every linked card (and older unlinked cards with the old name) in all arcs.
+5. Already done in the Literary Studio redesign.
+Tests: 43 unit tests (+7 for layout, labels, connected-add, rename) and a 34-check browser run in both themes; earlier suites still pass.
 
 ---
 
@@ -125,7 +133,7 @@ interface CommonNodeData { …; onEnter?: Effect[] }   // e.g. "visited_library 
 - Text variants inside Dialog/Scene (`if met_mira → "Hello again"`), avoiding duplicate nodes.
 - Text-expression conditions (`trust_mira >= 5 && has_key`) on top of the rule builder.
 - Single undo step for Delete-key removal (node + edges currently push two entries).
-- Scene library tab; IndexedDB storage instead of localStorage; Twine/ink export.
+- ~~Scene library tab~~ ✅ done 2026-11-03 — see `scene-library-plan.md`. Still open: IndexedDB storage instead of localStorage; Twine/ink export.
 
 ---
 

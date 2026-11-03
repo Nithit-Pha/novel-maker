@@ -1,0 +1,14 @@
+0c4217ce6191cf3becd4c6abc9f9ce32  package-lock.json
+b60c865869768807a6f090509c7a8224  package.json
+ec76fd1d05320f543aab3ae2885aeb35  src/App.tsx
+fa14a253fc1553281daf65d5f65c0f0c  src/PlayMode.tsx
+8dec59ea8404bf269a2d96d80ba00135  src/Toolbar.tsx
+98162b8b87664c3d8c07a00b5e600ec8  src/export/exportHtml.ts
+2210f54e13fb330e94d63a65838755f0  src/index.css
+34bb5a17ea50bd79dcd9e94f0ddaf8f3  src/library/LibraryPanel.tsx
+20138eaaa0b4557c7db57b71822b4e64  src/nodes/DialogNode.tsx
+0d392bb41368079fe8e741f3d818a27e  src/nodes/EndNode.tsx
+01278319d07f41c122f4ee1686dc72fe  src/store.ts
+ea2e821bcaa2357cb2757aaa62b0e138  src/types.ts
+4dab11f51c4a2a594d4cc178833a19b9  src/ui/CanvasChrome.tsx
+73c82b03b97b9f3f0b5cbb96795dfaf7  src/ui/viewPrefs.ts

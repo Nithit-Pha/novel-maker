@@ -1,0 +1,36 @@
+// Story-graph helpers for the editor. All play logic lives in runtime/core.js,
+// which is shared with the exported HTML player; this module re-exports it.
+
+export {
+  normHandle,
+  choiceHandle,
+  itemHandle,
+  branchHandle,
+  outcomeHandle,
+  findStart,
+  nextNodeId,
+  isWired,
+  defaultValue,
+  coerce,
+  initialVars,
+  applyEffects,
+  evaluate,
+  describeCondition,
+  describeEffects,
+  choiceState,
+  pickOutcome,
+  outcomeOdds,
+  buildIndex,
+  NO_SCENE,
+  sceneAfter,
+  land,
+  startPlay,
+  startAt,
+  currentNode,
+  hasNext,
+  next,
+  choose,
+  enterItem,
+} from './runtime/core.js';
+
+export type { CallFrame, PlayState, StoryIndex, Vars, Rng, ChancePick, RtNode, RtEdge } from './runtime/core.js';

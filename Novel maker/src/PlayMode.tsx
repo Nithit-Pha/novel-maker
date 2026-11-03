@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowLeft, ArrowRight, FlaskConical, Lock, Map as MapIcon, RotateCcw, Trophy, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bookmark, FlaskConical, Lock, Map as MapIcon, RotateCcw, SkipBack, Trophy, X } from 'lucide-react';
 import type {
   ChanceData,
   ChapterData,
@@ -14,6 +14,7 @@ import type {
 import type { Project } from './project';
 import {
   buildIndex,
+  checkpointStep,
   choiceState,
   choose,
   currentNode,
@@ -23,7 +24,9 @@ import {
   isWired,
   choiceHandle,
   itemHandle,
+  loadSave,
   next,
+  restartArc,
   startPlay,
   startAt,
   type PlayState,
@@ -34,12 +37,14 @@ import { RecapOverlay, buildRecap, markEndingSeen, readSeenEndings, resetSeenEnd
 import { VarValueInput } from './logic/fields';
 import { NODE_ICONS } from './ui/icons';
 import { useCharacterStore } from './library/characterStore';
+import { sceneSrc, useSceneStore } from './library/sceneStore';
+import { nodeTitle, type FlowNode } from './search';
 
 interface Props {
   project: Project;
   onClose: () => void;
-  /** "Play from here": start at this card with these variable values. */
-  start?: { arcId: string; nodeId: string; vars: Vars };
+  /** "Play from here": start at this card with these variable values (and the background showing there). */
+  start?: { arcId: string; nodeId: string; vars: Vars; scene?: string | null };
   /** "Play this route": replay these steps first (Back still works). */
   route?: Route;
 }
@@ -48,7 +53,8 @@ interface Props {
 export default function PlayMode({ project, onClose, start, route }: Props) {
   // All play rules come from runtime/core.js — the same code the exported HTML runs.
   const index = useMemo(() => buildIndex(project), [project]);
-  const fresh = () => (start ? startAt(index, start.arcId, start.nodeId, start.vars) : startPlay(index, project.activeArcId));
+  const fresh = () =>
+    start ? startAt(index, start.arcId, start.nodeId, start.vars, undefined, undefined, start.scene) : startPlay(index, project.activeArcId);
 
   // Replayed route → its states become the history, so Back walks through it.
   const replayed = useMemo(() => (route ? replayRoute(project, route) : null), [project, route]);
@@ -64,6 +70,10 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
   const arc = index.arcs[state.arcId];
   const current = currentNode(index, state);
   const edges = arc?.edges ?? [];
+  const scenes = useSceneStore((s) => s.scenes);
+  useSceneStore((s) => s.io);
+  const sceneNow = state.scene ? scenes.find((x) => x.id === state.scene) : undefined;
+  const bgSrc = sceneSrc(sceneNow);
 
   useEffect(() => {
     if (current?.type === 'end') setSeen(markEndingSeen(galleryKey, current.id));
@@ -88,6 +98,28 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
     setActions([]);
     setRecap(null);
   };
+  /**
+   * Go back to a save point / the arc start. Rewinds to the step where it was made,
+   * so Back and "Your route" read as a new path from there. Found endings stay found.
+   */
+  const rewind = (field: 'save' | 'arcStart', fallback: PlayState) => {
+    const cp = state[field];
+    if (!cp) return;
+    const states = [...history, state];
+    const i = checkpointStep(states, cp, field);
+    if (i < 0) {
+      setState(fallback);
+      setHistory([]);
+      setActions([]);
+    } else {
+      setState(states[i]);
+      setHistory(history.slice(0, i));
+      setActions(actions.slice(0, i));
+    }
+    setRecap(null);
+  };
+  const backToSave = () => rewind('save', loadSave(state));
+  const backToArc = () => rewind('arcStart', restartArc(index, state));
   const recapRows = useMemo(() => (recap ? buildRecap(project, index, history, actions) : []), [recap, project, index, history, actions]);
 
   // Keyboard: keep a ref to the latest handlers so the listener never goes stale.
@@ -123,9 +155,36 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
     () => project.arcs.reduce((n, a) => n + a.nodes.filter((x) => x.type === 'end' && seen.includes(x.id)).length, 0),
     [project, seen]
   );
+  // Save point / arc start offered on the ending screen.
+  const save = state.save;
+  const arcStart = state.arcStart;
+  const saveNode = save?.currentId ? index.arcs[save.arcId]?.map[save.currentId] : undefined;
+  const saveLabel = saveNode ? nodeTitle(saveNode as FlowNode) : 'Save point';
+  const showArc =
+    !!arcStart &&
+    arcStart !== (history[0] ?? state).arcStart &&
+    !(save && save.arcId === arcStart.arcId && save.currentId === arcStart.currentId);
+  const arcStartName = arcStart ? index.arcs[arcStart.arcId]?.name || 'this arc' : '';
+  const onSaveCard = !!save && current?.type !== 'end' && save.arcId === state.arcId && save.currentId === state.currentId;
   const endButtons = (
+    <div>
+      {save && (
+        <p className="text-muted text-sm mb-3">
+          Last save point: <span className="text-fg-soft font-medium">{saveLabel}</span>
+        </p>
+      )}
     <div className="flex flex-wrap justify-center gap-2">
-      <button onClick={restart} className="nf-btn nf-btn-primary h-10 px-5">
+      {save && (
+        <button onClick={backToSave} className="nf-btn nf-btn-primary h-10 px-5" title={`Go back to “${saveLabel}”, as it was when you got there`}>
+          <Bookmark size={15} /> Continue from save point
+        </button>
+      )}
+      {showArc && (
+        <button onClick={backToArc} className="nf-btn nf-btn-outline h-10 px-4" title="Go back to the first card of this arc, as it was when you got there">
+          <SkipBack size={15} /> Start of {arcStartName}
+        </button>
+      )}
+      <button onClick={restart} className={`nf-btn ${save ? 'nf-btn-outline' : 'nf-btn-primary'} h-10 px-5`} title="Start the whole story again">
         <RotateCcw size={15} /> Read again
       </button>
       <button onClick={() => setRecap('route')} className="nf-btn nf-btn-outline h-10 px-4">
@@ -136,6 +195,7 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
           <Trophy size={15} /> Endings {foundCount} / {endingCount}
         </button>
       )}
+    </div>
     </div>
   );
 
@@ -172,8 +232,12 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
       </div>
 
       <div className="flex-1 flex min-h-0">
-        <div className="flex-1 flex items-center justify-center px-5 sm:px-8 py-10 overflow-auto">
-          <div className="w-full max-w-2xl" key={`${state.arcId}:${state.currentId}:${history.length}`}>
+        <div className="flex-1 relative flex items-center justify-center px-5 sm:px-8 py-10 overflow-auto">
+          <SceneBackdrop src={bgSrc} name={sceneNow?.name} />
+          <div
+            className={`relative w-full max-w-2xl ${bgSrc ? 'nf-reading-panel' : ''}`}
+            key={`${state.arcId}:${state.currentId}:${history.length}`}
+          >
             {noStory && (
               <div className="text-center text-muted">
                 <h2 className="font-story text-2xl text-fg mb-2">No story to play</h2>
@@ -199,7 +263,7 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
               </Card>
             )}
             {current?.type === 'scene' && (
-              <Card kind="scene" kicker={(current.data as SceneData).background || 'Scene'}>
+              <Card kind="scene" kicker={(current.data as SceneData).background || sceneNow?.name || 'Scene'}>
                 <p className="font-story text-2xl text-fg-soft leading-relaxed italic mb-10">
                   {(current.data as SceneData).description || <span className="text-faint">(no description)</span>}
                 </p>
@@ -260,6 +324,11 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
           <ArrowLeft size={15} /> Back
         </button>
         <span className="text-center px-2">
+          {onSaveCard && (
+            <span className="text-accent font-medium mr-1.5 inline-flex items-center gap-1 align-middle">
+              <Bookmark size={12} fill="currentColor" /> Save point ·
+            </span>
+          )}
           {current?.type === 'decision'
             ? 'Choose what happens next'
             : current?.type === 'loop'
@@ -270,6 +339,32 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
         </span>
         <span className="w-16" />
       </div>
+    </div>
+  );
+}
+
+/**
+ * The scene image behind the reading page. Each new image fades in over the
+ * previous one; the previous layer is dropped once the fade is done.
+ */
+function SceneBackdrop({ src, name }: { src: string; name?: string }) {
+  const [layers, setLayers] = useState<{ src: string; key: number }[]>(() => (src ? [{ src, key: 0 }] : []));
+  const counter = useRef(1);
+  useEffect(() => {
+    setLayers((ls) => {
+      if ((ls[ls.length - 1]?.src ?? '') === src) return ls;
+      return [...ls.slice(-1), { src, key: counter.current++ }];
+    });
+    const t = window.setTimeout(() => setLayers((ls) => ls.slice(-1)), 700);
+    return () => window.clearTimeout(t);
+  }, [src]);
+  if (layers.every((l) => !l.src)) return null;
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden={!name} role={name ? 'img' : undefined} aria-label={name ? `Background: ${name}` : undefined} data-scene={src ? name : ''}>
+      {layers.map((l) =>
+        l.src ? <div key={l.key} className="nf-scene-layer" style={{ backgroundImage: `url("${l.src}")` }} /> : <div key={l.key} className="nf-scene-layer nf-paper" />
+      )}
+      <div className="nf-scene-veil" />
     </div>
   );
 }
@@ -312,7 +407,9 @@ function NextButton({ onNext, hasNext, label = 'Next' }: { onNext: () => void; h
 function DialogCard({ data, onNext, hasNext }: { data: DialogData; onNext: () => void; hasNext: boolean }) {
   const characters = useCharacterStore((s) => s.characters);
   const who = data.character?.trim() ?? '';
-  const portrait = characters.find((c) => c.name.trim().toLowerCase() === who.toLowerCase())?.image;
+  const portrait = (
+    characters.find((c) => c.id === data.characterId) ?? characters.find((c) => c.name.trim().toLowerCase() === who.toLowerCase())
+  )?.image;
   return (
     <Card
       kind="dialog"
@@ -445,7 +542,9 @@ function EndCard({ data, buttons }: { data: EndData; buttons: ReactNode }) {
   const characters = useCharacterStore((s) => s.characters);
   const who = data.character?.trim() ?? '';
   const line = data.text?.trim() ?? '';
-  const portrait = who ? characters.find((c) => c.name.trim().toLowerCase() === who.toLowerCase())?.image : undefined;
+  const portrait = who
+    ? (characters.find((c) => c.id === data.characterId) ?? characters.find((c) => c.name.trim().toLowerCase() === who.toLowerCase()))?.image
+    : undefined;
   return (
     <Card kind="end" kicker="Ending" center>
       <h2 className="font-story text-4xl sm:text-5xl text-fg leading-tight mb-6">{data.title?.trim() || 'The End'}</h2>

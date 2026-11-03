@@ -17,6 +17,8 @@ export interface Outfit {
 export interface Character {
   id: string;
   name: string;
+  /** Optional, free text (e.g. "Female", "Male", "Non-binary"). Missing in older saves. */
+  gender?: string;
   /** Portrait, stored as a data URL. */
   image?: string;
   outfits: Outfit[];
@@ -26,6 +28,23 @@ export interface Character {
   createdAt: string;
   updatedAt: string;
 }
+
+/** A background image in the project's Scene Library. */
+export interface SceneAsset {
+  id: string;
+  name: string;
+  /** Folder projects: image file in saves/<Project>/scenes/ (e.g. "<id>-<rev>.jpg"). */
+  file?: string;
+  /** Browser-only projects (no local server), and inside exported JSON: the image as a data URL. */
+  data?: string;
+  width?: number;
+  height?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `sceneId` value that clears the background (an empty / missing sceneId keeps it). */
+export const NO_SCENE = 'none';
 
 export const STAT_MIN = 0;
 export const STAT_MAX = 10;

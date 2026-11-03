@@ -10,6 +10,7 @@ import {
   findStart,
   itemHandle,
   normHandle,
+  NO_SCENE,
   outcomeHandle,
 } from '../engine';
 
@@ -104,7 +105,11 @@ export function structuralReach(project: Project): { arcs: Set<string>; nodes: S
   return { arcs, nodes };
 }
 
-export function validateProject(project: Project): Issue[] {
+/**
+ * `sceneIds`: ids in the Scene Library. When given, cards that use a scene
+ * missing from it are reported.
+ */
+export function validateProject(project: Project, opts: { sceneIds?: Set<string> } = {}): Issue[] {
   const issues: Issue[] = [];
   const push = (i: Omit<Issue, 'id'>) =>
     issues.push({ ...i, id: `${i.severity}:${i.arcId ?? ''}:${i.nodeId ?? ''}:${i.message}` });
@@ -211,6 +216,10 @@ export function validateProject(project: Project): Issue[] {
         const where = [...new Set(missing.map((m) => m.where))].join(', ');
         push({ severity: 'error', ...at, message: `Uses a deleted or unset variable (${where}).` });
       }
+
+      // Scene Library
+      if (opts.sceneIds && d.sceneId && d.sceneId !== NO_SCENE && !opts.sceneIds.has(d.sceneId))
+        push({ severity: 'warning', ...at, message: 'Uses a scene that is no longer in the Library — pick another or remove it.' });
 
       // Empty text
       if (d.kind === 'dialog' && !d.text?.trim()) push({ severity: 'note', ...at, message: 'Dialogue has no text.' });

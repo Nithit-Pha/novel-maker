@@ -366,6 +366,29 @@ select {
   border: 1px dashed rgb(var(--accent) / 0.6);
 }
 
+.nf-wire-label {
+  position: absolute;
+  pointer-events: none;
+  max-width: 145px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: 500 10.5px/1 'DM Sans', sans-serif;
+  color: rgb(var(--muted));
+  background: rgb(var(--surface) / 0.92);
+  border: 1px solid rgb(var(--border));
+  border-radius: 999px;
+  padding: 3px 7px;
+  box-shadow: var(--shadow-sm);
+}
+.nf-wire-label.is-hot {
+  color: rgb(var(--fg));
+  border-color: rgb(var(--accent) / 0.6);
+}
+.nf-has-hot .nf-wire-label:not(.is-hot) {
+  opacity: 0.35;
+}
+
 /* Tag filter: dim nodes that don't match the active tags */
 .react-flow__node.nf-dim {
   opacity: 0.16;
@@ -381,6 +404,36 @@ select {
 .animate-fade-in {
   animation: fadeIn 0.25s ease-out;
 }
+/* Run mode: scene background behind the reading page */
+@keyframes nfSceneIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.nf-scene-layer {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  animation: nfSceneIn 0.6s ease-out;
+}
+.nf-scene-veil {
+  position: absolute;
+  inset: 0;
+  background: rgb(var(--bg) / 0.18);
+}
+.nf-reading-panel {
+  background: rgb(var(--surface) / 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgb(var(--border) / 0.7);
+  border-radius: 20px;
+  box-shadow: var(--shadow-lg);
+  padding: 2rem 2.25rem;
+}
+@media (max-width: 640px) {
+  .nf-reading-panel { padding: 1.5rem 1.25rem; }
+}
+
 @keyframes nfPop {
   from { opacity: 0; transform: translateY(4px) scale(0.98); }
   to { opacity: 1; transform: none; }

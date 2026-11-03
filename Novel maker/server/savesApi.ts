@@ -5,6 +5,8 @@
 //       project.json                 { name, title, createdAt, updatedAt }
 //       story/story.json             the story (Novel Flow project JSON, format v3)
 //       characters/characters.json   the project's character library
+//       scenes/scenes.json           the project's scene library (names, file names)
+//       scenes/<id>-<rev>.png|jpg    scene images; replaced/removed ones go to scenes/_deleted/
 //     _trash/                        deleted projects are moved here, never erased
 //
 // Same layout the in-app "Save to folder" feature already uses, so folders are
@@ -21,10 +23,14 @@ type Req = {
 type Res = {
   statusCode: number;
   setHeader: (k: string, v: string) => void;
-  end: (body?: string) => void;
+  end: (body?: string | Uint8Array) => void;
 };
 
 const MAX_BODY = 80 * 1024 * 1024; // portraits are stored inline
+/** Scene image file names: never contain a path, only these extensions. */
+const IMAGE_FILE = /^[A-Za-z0-9-]{1,120}\.(png|jpg)$/;
+const IMAGE_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg' };
+const MAX_IMAGE = 30 * 1024 * 1024;
 const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
 export class ApiError extends Error {
@@ -100,7 +106,14 @@ export function createSavesStore(root: string) {
     meta: path.join(dir(name), 'project.json'),
     story: path.join(dir(name), 'story', 'story.json'),
     characters: path.join(dir(name), 'characters', 'characters.json'),
+    scenes: path.join(dir(name), 'scenes', 'scenes.json'),
+    scenesDir: path.join(dir(name), 'scenes'),
   });
+
+  function imageName(file: string): string {
+    if (!IMAGE_FILE.test(file)) throw new ApiError(400, 'Invalid image name.');
+    return file;
+  }
 
   async function uniqueName(base: string): Promise<string> {
     if (!(await exists(dir(base)))) return base;
@@ -157,28 +170,31 @@ export function createSavesStore(root: string) {
         meta: await readJson<Meta>(f.meta, { name: safe }),
         story: await readJson<unknown>(f.story, null),
         characters: await readJson<unknown[]>(f.characters, []),
+        scenes: await readJson<unknown[]>(f.scenes, []),
       };
     },
 
     /** Create a new project; picks "Name (2)" if the name is taken. */
-    async create(rawName: string, story: unknown, characters: unknown) {
+    async create(rawName: string, story: unknown, characters: unknown, scenes?: unknown) {
       await fs.mkdir(root, { recursive: true });
       const name = await uniqueName(safeProjectName(rawName));
       const now = new Date().toISOString();
       const f = files(name);
       await writeAtomic(f.story, JSON.stringify(story ?? null, null, 2));
       await writeAtomic(f.characters, JSON.stringify(characters ?? [], null, 2));
+      if (scenes !== undefined) await writeAtomic(f.scenes, JSON.stringify(scenes ?? [], null, 2));
       await writeAtomic(f.meta, JSON.stringify({ name, title: name, createdAt: now, updatedAt: now }, null, 2));
       return { name, updatedAt: now };
     },
 
-    async save(name: string, story: unknown, characters: unknown) {
+    async save(name: string, story: unknown, characters: unknown, scenes?: unknown) {
       const safe = safeProjectName(name);
       const f = files(safe);
       const meta = await readJson<Meta>(f.meta, { name: safe });
       const now = new Date().toISOString();
       await writeAtomic(f.story, JSON.stringify(story ?? null, null, 2));
       if (characters !== undefined) await writeAtomic(f.characters, JSON.stringify(characters ?? [], null, 2));
+      if (scenes !== undefined) await writeAtomic(f.scenes, JSON.stringify(scenes ?? [], null, 2));
       await writeAtomic(
         f.meta,
         JSON.stringify({ ...meta, name: safe, title: meta.title || safe, createdAt: meta.createdAt || now, updatedAt: now }, null, 2)
@@ -215,6 +231,46 @@ export function createSavesStore(root: string) {
       const now = new Date().toISOString();
       await writeAtomic(f.meta, JSON.stringify({ ...meta, name: target, title: target, createdAt: now, updatedAt: now }, null, 2));
       return { name: target };
+    },
+
+    /** Write a scene image from a data URL (png or jpeg; the extension must match). */
+    async putImage(name: string, file: string, dataUrl: unknown) {
+      const safe = await requireProject(name);
+      const img = imageName(file);
+      const m = /^data:(image\/(?:png|jpeg));base64,([A-Za-z0-9+/=\s]+)$/.exec(String(dataUrl ?? ''));
+      if (!m) throw new ApiError(400, 'Only .png and .jpeg images can be used as scenes.');
+      if (IMAGE_TYPES[img.split('.').pop()!] !== m[1]) throw new ApiError(400, 'Image type does not match its file name.');
+      const buf = Buffer.from(m[2], 'base64');
+      if (buf.length > MAX_IMAGE) throw new ApiError(413, 'Image is too large.');
+      const target = path.join(files(safe).scenesDir, img);
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
+      await fs.writeFile(tmp, buf);
+      await fs.rename(tmp, target);
+      return { file: img, bytes: buf.length };
+    },
+
+    async readImage(name: string, file: string) {
+      const safe = await requireProject(name);
+      const img = imageName(file);
+      try {
+        const buf = await fs.readFile(path.join(files(safe).scenesDir, img));
+        return { buf, type: IMAGE_TYPES[img.split('.').pop()!] };
+      } catch {
+        throw new ApiError(404, 'Image not found.');
+      }
+    },
+
+    /** Move a scene image to scenes/_deleted/ (recoverable). Missing files are fine. */
+    async removeImage(name: string, file: string) {
+      const safe = await requireProject(name);
+      const img = imageName(file);
+      const from = path.join(files(safe).scenesDir, img);
+      if (!(await exists(from))) return { file: img };
+      const bin = path.join(files(safe).scenesDir, '_deleted');
+      await fs.mkdir(bin, { recursive: true });
+      await fs.rename(from, path.join(bin, img));
+      return { file: img };
     },
 
     /** Move to saves/_trash/ (recoverable) instead of deleting. */
@@ -276,6 +332,7 @@ function send(res: Res, status: number, body: unknown) {
  *   POST   /:name/rename {to}           POST /:name/duplicate {to?}
  *   DELETE /:name       → move to _trash
  *   GET    /_info       → { dir }
+ *   PUT    /:name/scenes/:file {data}   GET /:name/scenes/:file   DELETE /:name/scenes/:file
  */
 export function createSavesHandler(root: string) {
   const store = createSavesStore(root);
@@ -290,7 +347,7 @@ export function createSavesHandler(root: string) {
         if (m === 'POST') {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const b = (await readBody(req)) as any;
-          return send(res, 201, await store.create(b.name, b.story, b.characters));
+          return send(res, 201, await store.create(b.name, b.story, b.characters, b.scenes));
         }
       }
       if (parts.length === 1 && parts[0] === '_info' && m === 'GET') {
@@ -302,9 +359,26 @@ export function createSavesHandler(root: string) {
         if (m === 'PUT') {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const b = (await readBody(req)) as any;
-          return send(res, 200, await store.save(name, b.story, b.characters));
+          return send(res, 200, await store.save(name, b.story, b.characters, b.scenes));
         }
         if (m === 'DELETE') return send(res, 200, await store.trash(name));
+      }
+      if (parts.length === 3 && parts[1] === 'scenes') {
+        const [name, , file] = parts;
+        if (m === 'GET') {
+          const { buf, type } = await store.readImage(name, file);
+          res.statusCode = 200;
+          res.setHeader('Content-Type', type);
+          // File names change whenever an image is replaced, so they can be cached for good.
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          return res.end(new Uint8Array(buf));
+        }
+        if (m === 'PUT') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const b = (await readBody(req)) as any;
+          return send(res, 200, await store.putImage(name, file, b.data));
+        }
+        if (m === 'DELETE') return send(res, 200, await store.removeImage(name, file));
       }
       if (parts.length === 2 && m === 'POST') {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

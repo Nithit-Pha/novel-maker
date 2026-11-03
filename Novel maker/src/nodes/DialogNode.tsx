@@ -3,6 +3,7 @@ import { useFlowStore } from '../store';
 import type { DialogData } from '../types';
 import NodeHeader from './NodeHeader';
 import TagBar from './TagBar';
+import CharacterField from '../library/CharacterField';
 import OnEnterSection from '../logic/OnEnterSection';
 
 type DialogNodeType = Node<DialogData, 'dialog'>;
@@ -19,16 +20,15 @@ export default function DialogNode({ id, data, selected }: NodeProps<DialogNodeT
       <div className="p-3 space-y-2">
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">Character</label>
-          <input
+          <CharacterField
             value={data.character}
-            onChange={(e) => updateNodeData(id, { character: e.target.value })}
-            placeholder="e.g. Alice"
-            className="w-full bg-ink-900 border border-ink-600 text-white text-sm px-2 py-1 rounded focus:outline-none focus:border-accent-dialog nodrag"
-            onMouseDown={(e) => e.stopPropagation()}
+            characterId={data.characterId}
+            onChange={(character, characterId) => updateNodeData(id, { character, characterId })}
+            className="bg-ink-900 border border-ink-600 text-white text-sm px-2 py-1 rounded focus:outline-none focus:border-accent-dialog"
           />
         </div>
         <div>
-          <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">Dialog</label>
+          <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">Dialogue</label>
           <textarea
             value={data.text}
             onChange={(e) => updateNodeData(id, { text: e.target.value })}

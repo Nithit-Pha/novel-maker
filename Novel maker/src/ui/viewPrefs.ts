@@ -5,13 +5,18 @@ const KEY = 'novel-flow-view';
 interface Prefs {
   grid: boolean;
   minimap: boolean;
+  /** Choice / branch / outcome text on wires. */
+  labels: boolean;
+  /** Canvas tool: Hand (drag empty canvas to move around) or Select (drag to draw a selection box). */
+  tool: 'hand' | 'select';
 }
 
 function read(): Prefs {
   try {
-    return { grid: true, minimap: true, ...JSON.parse(localStorage.getItem(KEY) || '{}') };
+    const v = { grid: true, minimap: true, labels: true, tool: 'hand' as const, ...JSON.parse(localStorage.getItem(KEY) || '{}') };
+    return { ...v, tool: v.tool === 'select' ? 'select' : 'hand' };
   } catch {
-    return { grid: true, minimap: true };
+    return { grid: true, minimap: true, labels: true, tool: 'hand' };
   }
 }
 
@@ -29,8 +34,8 @@ export const useView = create<ViewState>((setState, get) => ({
   set: (p) => {
     setState(p);
     try {
-      const { grid, minimap } = get();
-      localStorage.setItem(KEY, JSON.stringify({ grid, minimap }));
+      const { grid, minimap, labels, tool } = get();
+      localStorage.setItem(KEY, JSON.stringify({ grid, minimap, labels, tool }));
     } catch {
       /* ignore */
     }

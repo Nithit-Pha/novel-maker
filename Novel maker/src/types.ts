@@ -65,6 +65,16 @@ export interface CommonNodeData {
   tags?: string[];
   /** Variable changes applied every time the player arrives at this node. */
   onEnter?: Effect[];
+  /**
+   * Background image from the Scene Library, shown from this card on.
+   * Missing / '' = keep the current background; 'none' = clear it.
+   */
+  sceneId?: string;
+  /**
+   * Save point: on an ending the reader can come back here, with variables,
+   * loop progress and background as they were. Only on cards the reader stops on.
+   */
+  savePoint?: boolean;
   [key: string]: unknown;
 }
 
@@ -77,6 +87,8 @@ export interface ChapterData extends CommonNodeData {
 export interface DialogData extends CommonNodeData {
   kind: 'dialog';
   character: string;
+  /** Library character this line belongs to (keeps the name in sync on rename). */
+  characterId?: string;
   text: string;
 }
 
@@ -106,6 +118,7 @@ export interface DecisionData extends CommonNodeData {
 
 export interface SceneData extends CommonNodeData {
   kind: 'scene';
+  /** Optional caption, e.g. "Old mansion, night" (shown above the text in Run mode). */
   background: string;
   description: string;
 }
@@ -164,6 +177,8 @@ export interface EndData extends CommonNodeData {
   description: string;
   /** Optional closing line: who speaks… */
   character?: string;
+  /** Library character (keeps the name in sync on rename). */
+  characterId?: string;
   /** …and what they say. */
   text?: string;
   /** @deprecated ignored; present only in older saves. */

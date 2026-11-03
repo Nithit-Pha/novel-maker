@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { canSavePoint } from './runtime/core.js';
 import {
   addEdge,
   applyEdgeChanges,
@@ -72,8 +73,27 @@ export interface FlowState {
   onConnect: (connection: Connection) => void;
 
   addNode: (kind: NodeKind, position?: { x: number; y: number }) => void;
+  /**
+   * Add a card at `position` and wire it to an existing handle in one undo step
+   * (dragging a wire into empty space). Returns the new card's id.
+   */
+  addNodeConnected: (
+    kind: NodeKind,
+    position: { x: number; y: number },
+    from: { nodeId: string; handleId: string | null; handleType: 'source' | 'target' }
+  ) => string;
+  /** Move many cards at once (auto-layout) as one undo step. */
+  setPositions: (positions: Record<string, { x: number; y: number }>) => void;
+  /** A Library character was renamed: update every card linked to it (all arcs). */
+  renameCharacterRefs: (characterId: string, oldName: string, name: string) => void;
   updateNodeData: (id: string, patch: Partial<NodeData>) => void;
+  /** Set (or clear with undefined) the scene of these cards — one undo step. */
+  setSceneFor: (ids: string[], sceneId: string | undefined) => void;
+  /** Add a tag to these cards — one undo step. */
+  addTagTo: (ids: string[], tag: string) => void;
   deleteNode: (id: string) => void;
+  /** Delete these cards and their wires — one undo step. */
+  deleteNodes: (ids: string[]) => void;
   removeLoopItem: (nodeId: string, itemId: string) => void;
   /** Remove a decision choice and the wire leaving its handle (one undo step). */
   removeChoice: (nodeId: string, choiceId: string) => void;
@@ -82,6 +102,8 @@ export interface FlowState {
   removeOutcome: (nodeId: string, outcomeId: string) => void;
   commitDrag: () => void;
   togglePin: (id: string) => void;
+  /** Turn the save-point flag on/off for these cards (cards that can't be save points are skipped) — one undo step. */
+  setSavePointFor: (ids: string[], on: boolean) => void;
   setNodeTags: (id: string, tags: string[]) => void;
   selectOnly: (id: string) => void;
 
@@ -298,6 +320,57 @@ export const useFlowStore = create<FlowState>((set, get) => {
       set({ nodes: [...get().nodes, newNode], nextId: get().nextId + 1 });
     },
 
+    addNodeConnected: (kind, position, from) => {
+      pushHistory();
+      const id = newId();
+      const node: Node<NodeData> = { id, type: kind, position: { ...position }, data: defaultData(kind) };
+      const edge: Edge =
+        from.handleType === 'source'
+          ? { id: newId(), source: from.nodeId, sourceHandle: from.handleId, target: id, targetHandle: 'in' }
+          : { id: newId(), source: id, sourceHandle: 'out', target: from.nodeId, targetHandle: from.handleId };
+      // one wire per output: replace an existing wire on the same output
+      const h = normHandle(edge.sourceHandle);
+      const kept = get().edges.filter((e) => !(e.source === edge.source && normHandle(e.sourceHandle) === h));
+      set({ nodes: [...get().nodes, node], edges: [...kept, edge], nextId: get().nextId + 1 });
+      return id;
+    },
+
+    setPositions: (positions) => {
+      pushHistory();
+      set({
+        nodes: get().nodes.map((n) => (positions[n.id] ? { ...n, position: { ...positions[n.id] } } : n)),
+      });
+    },
+
+    renameCharacterRefs: (characterId, oldName, name) => {
+      const old = oldName.trim().toLowerCase();
+      let any = false;
+      // Cards linked to the character, plus older unlinked cards that used the old name.
+      const fix = (nodes: Node<NodeData>[]) => {
+        let changed = false;
+        const out = nodes.map((n) => {
+          const d = n.data as { characterId?: string; character?: string };
+          const linked = d.characterId === characterId;
+          const sameName = !d.characterId && !!old && (d.character ?? '').trim().toLowerCase() === old;
+          if (!linked && !sameName) return n;
+          if (d.character === name && linked) return n;
+          changed = true;
+          any = true;
+          return { ...n, data: { ...n.data, character: name, characterId } as NodeData };
+        });
+        return changed ? out : nodes;
+      };
+      const { graphs, activeArcId } = get();
+      const nextGraphs = { ...graphs };
+      for (const id of Object.keys(graphs)) {
+        if (id === activeArcId) continue;
+        const nodes = fix(graphs[id].nodes);
+        if (nodes !== graphs[id].nodes) nextGraphs[id] = { ...graphs[id], nodes };
+      }
+      set({ graphs: nextGraphs, nodes: fix(get().nodes) });
+      if (any) requestAutosave();
+    },
+
     updateNodeData: (id, patch) => {
       // Text edits are undoable: the first change in a burst pushes history.
       const now = Date.now();
@@ -307,6 +380,44 @@ export const useFlowStore = create<FlowState>((set, get) => {
         nodes: get().nodes.map((n) =>
           n.id === id ? { ...n, data: { ...n.data, ...patch } as NodeData } : n
         ),
+      });
+    },
+
+    setSceneFor: (ids, sceneId) => {
+      const set_ = new Set(ids);
+      if (set_.size === 0) return;
+      pushHistory();
+      set({
+        nodes: get().nodes.map((n) => {
+          if (!set_.has(n.id)) return n;
+          const data = { ...n.data } as NodeData;
+          if (sceneId) data.sceneId = sceneId;
+          else delete data.sceneId;
+          return { ...n, data };
+        }),
+      });
+    },
+
+    addTagTo: (ids, tag) => {
+      const t = tag.trim();
+      const set_ = new Set(ids);
+      if (!t || set_.size === 0) return;
+      pushHistory();
+      set({
+        nodes: get().nodes.map((n) => {
+          if (!set_.has(n.id) || n.data.tags?.includes(t)) return n;
+          return { ...n, data: { ...n.data, tags: [...(n.data.tags ?? []), t] } as NodeData };
+        }),
+      });
+    },
+
+    deleteNodes: (ids) => {
+      const set_ = new Set(ids);
+      if (set_.size === 0) return;
+      pushHistory();
+      set({
+        nodes: get().nodes.filter((n) => !set_.has(n.id)),
+        edges: get().edges.filter((e) => !set_.has(e.source) && !set_.has(e.target)),
       });
     },
 
@@ -324,6 +435,23 @@ export const useFlowStore = create<FlowState>((set, get) => {
         nodes: get().nodes.map((n) =>
           n.id === id ? { ...n, data: { ...n.data, pinned: !n.data.pinned } as NodeData } : n
         ),
+      });
+    },
+
+    setSavePointFor: (ids, on) => {
+      const set_ = new Set(ids);
+      const hit = get().nodes.filter((n) => set_.has(n.id) && canSavePoint(n) && !!n.data.savePoint !== on);
+      if (hit.length === 0) return;
+      const change = new Set(hit.map((n) => n.id));
+      pushHistory();
+      set({
+        nodes: get().nodes.map((n) => {
+          if (!change.has(n.id)) return n;
+          const data = { ...n.data } as NodeData;
+          if (on) data.savePoint = true;
+          else delete data.savePoint;
+          return { ...n, data };
+        }),
       });
     },
 

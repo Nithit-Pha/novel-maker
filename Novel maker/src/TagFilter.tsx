@@ -27,7 +27,6 @@ export default function TagFilter({ activeTags, onChange }: Props) {
           title="Filter nodes by tag (dims the rest)"
         >
           <Tag size={15} />
-          <span className="hidden 2xl:inline">Tags</span>
           {activeTags.length > 0 && <span className="text-[11px] font-semibold">{activeTags.length}</span>}
         </button>
       )}

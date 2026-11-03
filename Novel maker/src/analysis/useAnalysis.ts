@@ -3,6 +3,7 @@ import { snapshotProject, useFlowStore } from '../store';
 import { useUi } from '../ui/uiStore';
 import { structuralReach, validateProject, type Issue } from './validate';
 import { exploreRoutes, type ExploreResult } from './explore';
+import { useSceneStore } from '../library/sceneStore';
 
 const VALIDATE_DELAY = 250;
 const EXPLORE_DELAY = 1000;
@@ -43,6 +44,7 @@ export function useStoryAnalysis() {
   const graphs = useFlowStore((s) => s.graphs);
   const variables = useFlowStore((s) => s.variables);
   const checkOpen = useUi((s) => s.checkOpen);
+  const sceneKey = useSceneStore((s) => s.scenes.map((x) => x.id).join(','));
   const structural = useRef<Issue[]>([]);
   const derived = useRef<Issue[]>([]);
   // Only story content matters: ignore selection / measured-size changes.
@@ -56,12 +58,12 @@ export function useStoryAnalysis() {
   useEffect(() => {
     const t = window.setTimeout(() => {
       const project = snapshotProject(useFlowStore.getState());
-      structural.current = validateProject(project);
+      structural.current = validateProject(project, { sceneIds: new Set(useSceneStore.getState().scenes.map((x) => x.id)) });
       useUi.getState().setIssues([...structural.current, ...derived.current]);
     }, VALIDATE_DELAY);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signature, graphs]);
+  }, [signature, graphs, sceneKey]);
 
   useEffect(() => {
     if (!checkOpen) {

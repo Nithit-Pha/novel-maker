@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import { Pin, Search } from 'lucide-react';
+import { Bookmark, Pin, Search } from 'lucide-react';
+import { isSavePoint } from './runtime/core.js';
 import { useFlowStore } from './store';
 import { NODE_ICONS } from './ui/icons';
 import type { NodeKind } from './types';
@@ -129,6 +130,11 @@ export default function SearchPalette({ onClose }: Props) {
                       <span className="flex items-center gap-2">
                         <span className="text-sm text-white truncate">{nodeTitle(node)}</span>
                         {node.data.pinned && <Pin size={12} className="text-accent" fill="currentColor" />}
+                        {isSavePoint(node) && (
+                          <span title="Save point" className="inline-flex">
+                            <Bookmark size={12} className="text-accent" fill="currentColor" />
+                          </span>
+                        )}
                       </span>
                       <span className="block text-xs text-gray-400 truncate">{nodeBody(node)}</span>
                       {(node.data.tags ?? []).length > 0 && (

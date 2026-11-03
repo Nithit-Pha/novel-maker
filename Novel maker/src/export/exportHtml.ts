@@ -9,6 +9,8 @@ import type { NodeData, VariableDef } from '../types';
 import type { Character } from '../library/libraryTypes';
 import CORE_SOURCE from '../runtime/core.js?raw';
 import { endingLabels } from '../analysis/explore';
+import { canSavePoint } from '../runtime/core.js';
+import { nodeTitle } from '../search';
 
 interface ExportArc {
   id: string;
@@ -17,12 +19,21 @@ interface ExportArc {
   edges: Edge[];
 }
 
+/** A scene background, with its image already as a data URL (the file must work offline). */
+export interface ExportScene {
+  id: string;
+  name: string;
+  src: string;
+}
+
 interface BuildArgs {
   arcs: ExportArc[];
   startArcId: string;
   characters: Character[];
   variables?: VariableDef[];
   title?: string;
+  /** Scenes used by the story. Unused ones can be left out to keep the file small. */
+  scenes?: ExportScene[];
 }
 
 function escapeHtml(s: string): string {
@@ -37,9 +48,9 @@ if (/<\/script/i.test(CORE_SOURCE)) {
   throw new Error('runtime/core.js must not contain a closing script tag');
 }
 
-export function buildStoryHtml({ arcs, startArcId, characters, variables, title }: BuildArgs): string {
+export function buildStoryHtml({ arcs, startArcId, characters, variables, title, scenes }: BuildArgs): string {
   const storyTitle = (title && title.trim()) || 'My Story';
-  const characterList = characters.map((c) => ({ name: c.name, image: c.image ?? '' }));
+  const characterList = characters.map((c) => ({ id: c.id, name: c.name, image: c.image ?? '' }));
   const storyData = {
     title: storyTitle,
     startArcId,
@@ -51,10 +62,15 @@ export function buildStoryHtml({ arcs, startArcId, characters, variables, title 
       edges: a.edges.map((e) => ({ source: e.source, sourceHandle: e.sourceHandle ?? null, target: e.target })),
     })),
     characters: characterList,
+    scenes: (scenes ?? []).filter((x) => x.src).map((x) => ({ id: x.id, name: x.name, src: x.src })),
     // Ending names for the "Endings found" gallery (title, else "Ending N").
     endings: [
       ...endingLabels({ version: 3, meta: { title: storyTitle }, activeArcId: startArcId, arcs, variables: variables ?? [] }),
     ].map(([id, v]) => ({ id, label: v.label })),
+    // Save-point card titles for "Last save point: …", keyed "<arcId>:<nodeId>".
+    saveLabels: Object.fromEntries(
+      arcs.flatMap((a) => a.nodes.filter((n) => n.data.savePoint && canSavePoint(n)).map((n) => [`${a.id}:${n.id}`, nodeTitle(n)]))
+    ),
   };
 
   return `<!DOCTYPE html>
@@ -143,6 +159,9 @@ export function buildStoryHtml({ arcs, startArcId, characters, variables, title 
   .theend { color: var(--muted); font-size: 13px; letter-spacing: .3em; text-transform: uppercase; margin: 0 0 24px; }
   .tools { display: flex; gap: 4px; align-items: center; }
   .endbtns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .savecap { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+  .savecap b { color: var(--soft); font-weight: 600; }
+  .savemark { color: var(--accent); font-weight: 600; }
   .ghost { background: var(--surface); color: var(--soft); border: 1px solid var(--border); padding: 10px 18px; }
   .ghost:hover { background: var(--surface-2); color: var(--fg); }
   .overlay { position: fixed; inset: 0; background: rgba(40,30,20,.28); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
@@ -167,6 +186,16 @@ export function buildStoryHtml({ arcs, startArcId, characters, variables, title 
   .gallery .unseen .t { color: var(--faint); }
   .gallery .s { font-size: 12px; color: var(--faint); margin-top: 2px; }
   .reset { margin-top: 14px; font-size: 12px; }
+  /* Scene backgrounds: the image fills the reading area; the text sits on a paper panel. */
+  .stage { position: relative; }
+  .bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  .bg .layer { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0; transition: opacity .6s ease-out; }
+  .bg .layer.on { opacity: 1; }
+  .bg .veil { position: absolute; inset: 0; background: color-mix(in srgb, var(--bg) 18%, transparent); }
+  .stage.has-bg .card { position: relative; background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); border-radius: 20px; box-shadow: var(--shadow); padding: 32px 36px; }
+  @media (max-width: 640px) { .stage.has-bg .card { padding: 24px 20px; } }
+  @media (prefers-reduced-motion: reduce) { .bg .layer { transition: none; } }
 </style>
 </head>
 <body>
@@ -177,7 +206,7 @@ export function buildStoryHtml({ arcs, startArcId, characters, variables, title 
       <button class="navbtn outline" id="restart">Restart</button>
     </div>
   </div>
-  <div class="stage"><div id="root" class="card"></div></div>
+  <div class="stage" id="stage"><div class="bg" id="bg" aria-hidden="true"><div class="layer"></div><div class="layer"></div><div class="veil"></div></div><div id="root" class="card"></div></div>
   <div class="bottombar">
     <button class="navbtn" id="back">&larr; Back</button>
     <span id="hint"></span>
@@ -195,7 +224,29 @@ ${CORE_SOURCE}
 var S = window.STORY;
 var index = buildIndex(S);
 var charByName = {};
-(S.characters || []).forEach(function (c) { if (c && c.name) charByName[c.name.trim().toLowerCase()] = c; });
+var charById = {};
+(S.characters || []).forEach(function (c) { if (c && c.name) charByName[c.name.trim().toLowerCase()] = c; if (c && c.id) charById[c.id] = c; });
+
+var sceneById = {};
+(S.scenes || []).forEach(function (sc) { if (sc && sc.id) sceneById[sc.id] = sc; });
+var stageEl = document.getElementById('stage');
+var bgLayers = document.querySelectorAll('#bg .layer');
+var bgFront = 0;
+var bgShown = '';
+// Fade the new background in over the old one (two layers, swapped).
+function showScene(id) {
+  var sc = id ? sceneById[id] : null;
+  var src = sc ? sc.src : '';
+  if (src === bgShown) return;
+  bgShown = src;
+  stageEl.classList.toggle('has-bg', !!src);
+  document.getElementById('bg').setAttribute('data-scene', sc ? sc.name : '');
+  var back = bgLayers[1 - bgFront];
+  if (src) back.style.backgroundImage = 'url("' + src + '")';
+  back.classList.toggle('on', !!src);
+  bgLayers[bgFront].classList.remove('on');
+  bgFront = 1 - bgFront;
+}
 
 var state = startPlay(index, S.startArcId);
 var history = [];
@@ -223,16 +274,39 @@ function go(ns, action) { if (ns === state) return; history.push(state); actions
 function goNext() { go(next(index, state), { type: 'next' }); }
 function goBack() { if (!history.length) return; state = history.pop(); actions.pop(); render(); }
 function restart() { state = startPlay(index, S.startArcId); history = []; actions = []; closeOverlay(); render(); }
+// Back to a save point / the arc start: rewind to the step where it was made.
+function rewind(field, fallback) {
+  var cp = state[field]; if (!cp) return;
+  var states = history.concat([state]);
+  var i = checkpointStep(states, cp, field);
+  if (i < 0) { state = fallback; history = []; actions = []; }
+  else { state = states[i]; history = history.slice(0, i); actions = actions.slice(0, i); }
+  closeOverlay(); render();
+}
+function backToSave() { rewind('save', loadSave(state)); }
+function backToArc() { rewind('arcStart', restartArc(index, state)); }
+function onSaveCard() {
+  var sv = state.save, node = currentNode(index, state);
+  return !!sv && !!node && node.type !== 'end' && sv.arcId === state.arcId && sv.currentId === state.currentId;
+}
 
 // ---- End of a playthrough: "Your route" + "Endings found" ----
 function endButtons() {
   var seen = readSeen();
   var all = S.endings || [];
   var found = all.filter(function (e) { return seen.indexOf(e.id) !== -1; }).length;
-  var wrap = el('<div class="endbtns"><button class="endbtn">Read again</button><button class="ghost" data-tab="route">Your route</button>' +
-    (all.length ? '<button class="ghost" data-tab="endings">Endings ' + found + ' / ' + all.length + '</button>' : '') + '</div>');
-  wrap.querySelector('.endbtn').onclick = restart;
-  wrap.querySelectorAll('.ghost').forEach(function (b) { b.onclick = function () { openOverlay(b.getAttribute('data-tab')); }; });
+  var sv = state.save, as = state.arcStart;
+  var showArc = !!as && as !== (history[0] || state).arcStart && !(sv && sv.arcId === as.arcId && sv.currentId === as.currentId);
+  var saveName = sv ? ((S.saveLabels || {})[sv.arcId + ':' + sv.currentId] || 'Save point') : '';
+  var arcName = as && index.arcs[as.arcId] ? (index.arcs[as.arcId].name || 'this arc') : '';
+  var wrap = el('<div>' + (sv ? '<p class="savecap">Last save point: <b>' + esc(saveName) + '</b></p>' : '') + '<div class="endbtns">' +
+    (sv ? '<button class="endbtn" data-do="save" title="Go back there, as it was when you got there">&#8634; Continue from save point</button>' : '') +
+    (showArc ? '<button class="ghost" data-do="arc" title="Go back to the first card of this arc">&#8676; Start of ' + esc(arcName) + '</button>' : '') +
+    '<button class="' + (sv ? 'ghost' : 'endbtn') + '" data-do="again">Read again</button><button class="ghost" data-tab="route">Your route</button>' +
+    (all.length ? '<button class="ghost" data-tab="endings">Endings ' + found + ' / ' + all.length + '</button>' : '') + '</div></div>');
+  var acts = { save: backToSave, arc: backToArc, again: restart };
+  wrap.querySelectorAll('[data-do]').forEach(function (b) { b.onclick = acts[b.getAttribute('data-do')]; });
+  wrap.querySelectorAll('[data-tab]').forEach(function (b) { b.onclick = function () { openOverlay(b.getAttribute('data-tab')); }; });
   return wrap;
 }
 function recapRows() {
@@ -303,6 +377,7 @@ function render() {
   root.innerHTML = '';
   var arc = index.arcs[state.arcId];
   var node = currentNode(index, state);
+  showScene(state.scene);
   stepsEl.textContent = (arc ? arc.name + ' · ' : '') + (node ? ('step ' + (history.length + 1)) : (history.length + ' steps'));
   backBtn.disabled = history.length === 0;
   hintEl.textContent = 'Press Space or → to continue';
@@ -321,12 +396,13 @@ function render() {
       '<h2 class="bigline">' + (d.name ? esc(d.name) : '<span class="muted">(untitled chapter)</span>') + '</h2></div>');
     card.appendChild(nextButton('chapter', 'Begin →'));
   } else if (node.type === 'scene') {
-    card = el('<div><div class="kicker scene">🎬 ' + esc(d.background || 'Scene') + '</div>' +
+    var scName = state.scene && sceneById[state.scene] ? sceneById[state.scene].name : '';
+    card = el('<div><div class="kicker scene">🎬 ' + esc(d.background || scName || 'Scene') + '</div>' +
       '<p class="body scene">' + (d.description ? esc(d.description) : '<span class="muted">(no description)</span>') + '</p></div>');
     card.appendChild(nextButton('scene', 'Next →'));
   } else if (node.type === 'dialog') {
     var who = (d.character || '').trim();
-    var ch = charByName[who.toLowerCase()];
+    var ch = charById[d.characterId] || charByName[who.toLowerCase()];
     var avatar = (ch && ch.image) ? '<img class="avatar" src="' + esc(ch.image) + '" alt="" />' : '';
     card = el('<div><div class="kicker dialog">' + avatar + '<span>💬 ' + esc(who || 'Dialog') + '</span></div>' +
       '<p class="body">' + (d.text ? '&ldquo;' + esc(d.text) + '&rdquo;' : '<span class="muted">(no dialog text)</span>') + '</p></div>');
@@ -379,7 +455,7 @@ function render() {
     var ctx = (d.description || '').trim();
     var who2 = (d.character || '').trim();
     var line = (d.text || '').trim();
-    var ch2 = who2 ? charByName[who2.toLowerCase()] : null;
+    var ch2 = who2 ? (charById[d.characterId] || charByName[who2.toLowerCase()]) : null;
     var av2 = (ch2 && ch2.image) ? '<img class="avatar" src="' + esc(ch2.image) + '" alt="" />' : '';
     card = el('<div class="endwrap"><div class="kicker end">🏁 Ending</div>' +
       '<h2 class="bigline">' + esc(title || 'The End') + '</h2>' +
@@ -394,6 +470,7 @@ function render() {
   } else {
     card = el('<div class="muted">(unknown node)</div>');
   }
+  if (onSaveCard()) hintEl.innerHTML = '<span class="savemark">&#10003; Save point</span> &middot; ' + esc(hintEl.textContent);
   root.appendChild(card);
 }
 

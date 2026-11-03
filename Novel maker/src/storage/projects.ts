@@ -2,7 +2,7 @@
 //  - folder:  the app's ./saves folder, via the local server API (/api/saves)
 //  - browser: localStorage, used only when the API isn't available (static hosting)
 
-import type { Character } from '../library/libraryTypes';
+import type { Character, SceneAsset } from '../library/libraryTypes';
 
 export interface ProjectSummary {
   name: string;
@@ -16,6 +16,7 @@ export interface ProjectRecord {
   name: string;
   story: unknown;
   characters: Character[];
+  scenes: SceneAsset[];
   updatedAt?: string;
 }
 
@@ -25,12 +26,20 @@ export interface ProjectsBackend {
   location: string;
   list(): Promise<ProjectSummary[]>;
   load(name: string): Promise<ProjectRecord>;
-  save(name: string, story: unknown, characters: Character[]): Promise<void>;
+  save(name: string, story: unknown, characters: Character[], scenes?: SceneAsset[]): Promise<void>;
   /** Creates a project; returns the final (unique) name. */
-  create(name: string, story: unknown, characters: Character[]): Promise<string>;
+  create(name: string, story: unknown, characters: Character[], scenes?: SceneAsset[]): Promise<string>;
   rename(name: string, to: string): Promise<string>;
   duplicate(name: string): Promise<string>;
   remove(name: string): Promise<void>;
+  /**
+   * Scene images. The folder backend stores them as files next to the project;
+   * the browser fallback has no files (scenes keep their image as a data URL).
+   */
+  sceneFiles: boolean;
+  putSceneImage(name: string, file: string, dataUrl: string): Promise<void>;
+  removeSceneImage(name: string, file: string): Promise<void>;
+  sceneImageUrl(name: string, file: string): string;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,21 +76,39 @@ function folderBackend(dir: string): ProjectsBackend {
     location: dir,
     list: () => call<ProjectSummary[]>('GET', '/'),
     load: async (name) => {
-      const r = await call<{ name: string; story: unknown; characters: Character[]; meta?: { updatedAt?: string } }>(
-        'GET',
-        '/' + enc(name)
-      );
-      return { name: r.name, story: r.story, characters: r.characters ?? [], updatedAt: r.meta?.updatedAt };
+      const r = await call<{
+        name: string;
+        story: unknown;
+        characters: Character[];
+        scenes?: SceneAsset[];
+        meta?: { updatedAt?: string };
+      }>('GET', '/' + enc(name));
+      return {
+        name: r.name,
+        story: r.story,
+        characters: r.characters ?? [],
+        scenes: Array.isArray(r.scenes) ? r.scenes : [],
+        updatedAt: r.meta?.updatedAt,
+      };
     },
-    save: async (name, story, characters) => {
-      await call('PUT', '/' + enc(name), { story, characters });
+    save: async (name, story, characters, scenes) => {
+      await call('PUT', '/' + enc(name), { story, characters, scenes });
     },
-    create: async (name, story, characters) => (await call<{ name: string }>('POST', '/', { name, story, characters })).name,
+    create: async (name, story, characters, scenes) =>
+      (await call<{ name: string }>('POST', '/', { name, story, characters, scenes })).name,
     rename: async (name, to) => (await call<{ name: string }>('POST', `/${enc(name)}/rename`, { to })).name,
     duplicate: async (name) => (await call<{ name: string }>('POST', `/${enc(name)}/duplicate`, {})).name,
     remove: async (name) => {
       await call('DELETE', '/' + enc(name));
     },
+    sceneFiles: true,
+    putSceneImage: async (name, file, dataUrl) => {
+      await call('PUT', `/${enc(name)}/scenes/${enc(file)}`, { data: dataUrl });
+    },
+    removeSceneImage: async (name, file) => {
+      await call('DELETE', `/${enc(name)}/scenes/${enc(file)}`);
+    },
+    sceneImageUrl: (name, file) => `${API}/${enc(name)}/scenes/${enc(file)}`,
   };
 }
 
@@ -137,9 +164,16 @@ function browserBackend(): ProjectsBackend {
     if (!names.has(base.toLowerCase())) return base;
     for (let i = 2; ; i++) if (!names.has(`${base} (${i})`.toLowerCase())) return `${base} (${i})`;
   };
-  const put = (name: string, story: unknown, characters: Character[], createdAt?: string) => {
+  const put = (name: string, story: unknown, characters: Character[], createdAt?: string, scenes?: SceneAsset[]) => {
     const now = new Date().toISOString();
-    localStorage.setItem(projKey(name), JSON.stringify({ story, characters }));
+    if (scenes === undefined) {
+      try {
+        scenes = JSON.parse(localStorage.getItem(projKey(name)) || '{}').scenes;
+      } catch {
+        /* none */
+      }
+    }
+    localStorage.setItem(projKey(name), JSON.stringify({ story, characters, scenes: scenes ?? [] }));
     const idx = readIndex().filter((p) => p.name !== name);
     idx.unshift({ name, title: name, createdAt: createdAt ?? now, updatedAt: now, stats: storyStats(story) });
     writeIndex(idx);
@@ -152,14 +186,20 @@ function browserBackend(): ProjectsBackend {
       const raw = localStorage.getItem(projKey(name));
       if (!raw) throw new Error(`Project “${name}” was not found.`);
       const r = JSON.parse(raw);
-      return { name, story: r.story, characters: r.characters ?? [], updatedAt: readIndex().find((p) => p.name === name)?.updatedAt };
+      return {
+        name,
+        story: r.story,
+        characters: r.characters ?? [],
+        scenes: Array.isArray(r.scenes) ? r.scenes : [],
+        updatedAt: readIndex().find((p) => p.name === name)?.updatedAt,
+      };
     },
-    save: async (name, story, characters) => {
-      put(name, story, characters, readIndex().find((p) => p.name === name)?.createdAt);
+    save: async (name, story, characters, scenes) => {
+      put(name, story, characters, readIndex().find((p) => p.name === name)?.createdAt, scenes);
     },
-    create: async (name, story, characters) => {
+    create: async (name, story, characters, scenes) => {
       const n = unique(cleanName(name));
-      put(n, story, characters);
+      put(n, story, characters, undefined, scenes ?? []);
       return n;
     },
     rename: async (name, to) => {
@@ -179,13 +219,19 @@ function browserBackend(): ProjectsBackend {
       if (raw == null) throw new Error('Project not found.');
       const r = JSON.parse(raw);
       const n = unique(`${name} copy`);
-      put(n, r.story, r.characters ?? []);
+      put(n, r.story, r.characters ?? [], undefined, r.scenes ?? []);
       return n;
     },
     remove: async (name) => {
       localStorage.removeItem(projKey(name));
       writeIndex(readIndex().filter((p) => p.name !== name));
     },
+    sceneFiles: false,
+    putSceneImage: async () => {
+      throw new Error('Scene files need the Novel Flow server.');
+    },
+    removeSceneImage: async () => {},
+    sceneImageUrl: () => '',
   };
 }
 

@@ -77,7 +77,7 @@ You can deploy the contents of `dist/` to any static host (Netlify, Vercel, GitH
 Add **Dialog** and **Scene** directly from the toolbar; the **➕ Function ▾** dropdown groups the branching-logic nodes (**Start Chapter**, **Decision**, **Loop**, **Go to Arc**, **Condition**, **Chance**, **Ending**).
 
 - **Chapter** (📖, green) — a chapter start marker holding just a chapter name. It's the natural entry point and shows as a big title card in play.
-- **Scene** (🎬, purple) — a setting: a background label + description.
+- **Scene** (🎬, purple) — a setting: a background image from the Scene Library, an optional caption and a description.
 - **Dialog** (💬, blue) — a character speaking: character name + line. In play it shows the speaker's library portrait when the name matches a character.
 - **Decision** (🔀, orange) — a prompt with N choices; one outgoing handle per choice. The player picks **one** branch.
 - **Condition** (🧭, pink) — a silent router the reader never sees. Each branch has rules (e.g. `trust_mira ≥ 2` and `has_key is true`); the **first** branch that matches is taken, otherwise **Else**.
@@ -100,8 +100,33 @@ Variables remember what happened, so branches can **rejoin and still remember** 
 - **▶ Play from here** in every card header: pick starting variable values, then Run mode starts at that card.
 - At an ending, **Your route** shows each decision you passed — the choice you took, the ones you didn't, and locked ones 🔒 with their reason — and **Endings N / M** shows which endings you've found (unfound ones as "???"; per project in this browser; resettable). Exported HTML stories have both too.
 
+### Faster editing
+- **Drag a wire into empty space** and pick the card to create — it appears there, already connected (from an input: a card *before* it).
+- **Wire labels** show each choice / branch / outcome on its wire (toggle with the captions button bottom-right or in ⚙ Settings).
+- **Tidy** (wand button bottom-right, or ⋯ → Tidy) arranges the arc left → right; select 2+ cards to tidy just those. Ctrl+Z undoes it.
+- **Speaker field**: Dialogue and Ending cards suggest characters from the Library (with portrait). A new name can be added to the Library with one click; renaming a character in the Library updates every card that uses it.
+
+### Scenes (background images)
+- **📚 Library → Scenes**: **+ Scene** (or drop images on the tab) adds .png / .jpg / .jpeg images. Images larger than 2560 px are scaled down. Click a scene to rename it, replace its image (every card using it updates) or delete it.
+- Images are saved as files in `saves/<Project>/scenes/` (list in `scenes/scenes.json`); replaced or deleted images move to `scenes/_deleted/`.
+- **Every card** has a 🖼 button in its header: *Keep the current background*, *No background*, a Library scene, or *Add a scene from an image…*. A card that sets a scene shows it as a strip under its header.
+- A background **stays on screen** until a later card sets another one (or "No background"), so you set it once per place. Condition and Chance cards can switch it too.
+- Run mode and the exported HTML show the image behind the text (on a paper panel so it stays readable) and fade between scenes. *Play from here* starts with the background that leads to that card.
+- Story check warns about cards whose scene was deleted from the Library.
+
+### Save points
+- Click the **🔖 bookmark** in a card's header to make it a **save point** (chapter, scene, dialog, decision, loop, or a Chance set to *Reveal*). The card shows a "Save point" strip; search "save point" to list them.
+- While reading, the footer shows **✓ Save point** on such a card. The game remembers that moment: variables, loop progress and background.
+- At an ending, the reader can choose **Continue from save point** (the last one they reached), **Start of <arc>** (the first card of the current arc, as it was then) or **Read again** (from the very start).
+- Going back rewinds the route to that step, so **Back** and **Your route** read as a new path. Endings found stay found. On-enter effects are never applied twice.
+- Works the same in Run mode and the exported HTML. Saves last while the page is open (not stored after closing). Details: `docs/save-points-plan.md`.
+
+### Canvas tools and selecting many cards
+- Bottom-centre switch: **Move** (H — drag empty canvas to move around) and **Select** (V — drag empty canvas to draw a selection box; hold **Space** to move around). **Shift+drag** selects in either tool; Ctrl/⌘+click adds a card.
+- With 2+ cards selected a bar appears at the top: **Scene ▾ · Tag · Save point · Tidy · Delete · ✕** — each is one undo step. Esc clears the selection.
+
 ### Editing
-- Drag to move, scroll to zoom, drag empty space to pan
+- Drag to move, scroll to zoom, drag empty space to pan (Move tool)
 - Drag from a node's right handle to another node's left handle to connect them
 - Decision/Loop nodes have one handle per choice/item — wire each branch to a different next node
 - Each output handle holds one wire: connecting an already-wired handle replaces the old wire. Removing a choice removes only that choice's wire
@@ -128,20 +153,24 @@ Variables remember what happened, so branches can **rejoin and still remember** 
 - Reaches "**The End**" when you hit a node with no outgoing edge, or an **Ending** card (title, context and closing line) at an Ending node
 - Locked choices show 🔒 and their reason; Chance nodes set to *Reveal* show the result
 - **🧪 Variables** (top bar, when the story has variables) opens a drawer with the live values — edit them to test other routes
+- Scene backgrounds show behind the text and carry forward until a card changes them
 - **Back** steps backward through your path (and correctly rewinds loop progress)
 - **Restart** to play again from the beginning
+- At an ending: **Continue from save point** / **Start of <arc>** / **Read again** (see *Save points*)
 - Decisions/loops with an unwired branch show "(unconnected)" so you can spot gaps in your graph
 
 ### Export to playable HTML
-- **⬇ HTML** writes a single self-contained `.html` file — story data, styles, and a player are all inlined (character portraits embed too), so it plays in any browser **offline, with no install or server**. Double-click to play, or share the file.
+- **⬇ HTML** writes a single self-contained `.html` file — story data, styles, and a player are all inlined (character portraits and scene backgrounds embed too), so it plays in any browser **offline, with no install or server**. Double-click to play, or share the file.
 - The exported player runs the **same runtime code** as Run mode (`src/runtime/core.js` is inlined), so variables, conditions, chance, endings, loops and portals behave identically.
 
 ### Character Library
 - Click **📚 Library** in the toolbar to open a panel docked to the right side
-- Two tabs: **Character** and **Scene** (Scene is a placeholder for now)
+- Three tabs: **Character**, **Variables** and **Scenes** (see *Scenes* above)
 - The Character tab lists every character; **+ Character** at the top creates a new one
+- Each tab has a **search box**: Character searches name, gender, description, outfits, personality and abilities; Variables searches name, note and type ("flag", "counter", "text"); Scenes searches the name. Every word must match; ✕ or Esc clears; each tab keeps its own search while the Library is open
 - Each character has:
   - **Name**
+  - **Gender** (optional) — free text with suggestions (Female, Male, Non-binary, Unknown); shown under the name in the list
   - **Image** — upload a portrait (stored inline as a data URL, 3 MB max)
   - **Outfit** — add any number of designs, each with a name + description
   - **Personality** — add any number of traits, each with a custom 0–10 power bar
@@ -183,6 +212,10 @@ Variables remember what happened, so branches can **rejoin and still remember** 
 | ? | Help & shortcuts |
 | Ctrl/Cmd + K | Open search palette |
 | Delete / Backspace | Delete selected node or edge |
+| H / V | Move tool / Select tool |
+| Hold Space | Move around while using Select |
+| Shift + drag | Selection box (any tool) |
+| Esc | Clear the selection |
 | **In Run mode:** | |
 | Space or → | Next (Chapter/Scene/Dialog cards) |
 | ← or Backspace | Back |
@@ -199,6 +232,7 @@ src/
   home/HomePage.tsx    # projects home page
   storage/             # projects backend (folder or browser) + open-project session/autosave
   ui/                  # theme, dialogs & toasts, dropdowns, icons, canvas chrome (rail, zoom, help)
+  canvas/              # wire with label (NfEdge), wire label text, drop menu, Tidy layout (dagre)
   analysis/            # Story check: validate.ts (problems), explore.ts (route explorer), panel, live hook
   play/RouteRecap.tsx  # "Your route" timeline + endings gallery
   Toolbar.tsx          # top bar (add nodes, Function menu, undo, redo, search, tags, run, saves, export)
@@ -215,19 +249,22 @@ src/
   types.ts             # TypeScript types for node data
   nodes/
     ChapterNode.tsx    # chapter start marker (name only)
-    SceneNode.tsx      # background + description
+    SceneNode.tsx      # background picker + caption + description
     DialogNode.tsx     # character + dialog text
     DecisionNode.tsx   # prompt + dynamic list of choices, one handle each
     LoopNode.tsx       # title + items (complete-all), one handle each + done handle
     ConditionNode.tsx  # IF / ELIF branches with rules + ELSE handle
     ChanceNode.tsx     # weighted outcomes, silent or reveal
     EndNode.tsx        # named ending
-    NodeHeader.tsx     # shared card header: icon, pin toggle, delete
+    NodeHeader.tsx     # shared card header: icon, scene button + banner, play, pin, delete
     TagBar.tsx         # shared #tag chip editor
   library/
     libraryTypes.ts    # Character / Outfit / PowerStat types + helpers
     characterStore.ts  # Zustand store for the character library (localStorage)
-    LibraryPanel.tsx   # right-side panel: Character / Variables / Scene tabs
+    LibraryPanel.tsx   # right-side panel: Character / Variables / Scenes tabs
+    ScenesTab.tsx      # scene list, upload, rename / replace / delete
+    ScenePicker.tsx    # popover to choose a card's background
+    sceneStore.ts      # scene library store + image checks / scaling + upload
     VariablesTab.tsx   # story variables list
     CharacterEditor.tsx# form for a single character (name, image, outfits, stats, ...)
     savesFs.ts         # File System Access API helpers (pick folder, save/load/list)
@@ -257,7 +294,7 @@ src/
 - ~~Chapter nodes~~ ✓
 - ~~Loop node (complete every branch in any order)~~ ✓
 - ~~Export a standalone playable HTML file~~ ✓
-- Scene library (the Library panel's second tab is stubbed out)
+- ~~Scene library (background images in Run mode and export)~~ ✓ — see `docs/scene-library-plan.md`
 - ~~Variables and conditional branches~~ ✓ — next phases in `docs/branching-story-plan.md`
 - Auto-layout (dagre or elk)
 - Export as a screenplay-style script (.docx) or as Twine/Ink

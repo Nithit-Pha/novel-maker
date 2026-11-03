@@ -4,6 +4,10 @@ import { useCharacterStore } from './characterStore';
 import { type Character, emptyCharacter } from './libraryTypes';
 import CharacterEditor from './CharacterEditor';
 import VariablesTab from './VariablesTab';
+import ScenesTab from './ScenesTab';
+import LibrarySearch, { NoMatches } from './LibrarySearch';
+import { filterCharacters } from './librarySearch';
+import { useFlowStore } from '../store';
 
 interface Props {
   onClose: () => void;
@@ -17,6 +21,10 @@ export default function LibraryPanel({ onClose }: Props) {
   const deleteCharacter = useCharacterStore((s) => s.deleteCharacter);
 
   const [tab, setTab] = useState<Tab>('characters');
+  // One search per tab; kept while the Library is open.
+  const [queries, setQueries] = useState<Record<Tab, string>>({ characters: '', variables: '', scenes: '' });
+  const setQuery = (t: Tab) => (q: string) => setQueries((qs) => ({ ...qs, [t]: q }));
+  const shownCharacters = filterCharacters(characters, queries.characters);
   // null = list view; otherwise the character being edited (+ whether it's new)
   const [editing, setEditing] = useState<{ character: Character; isNew: boolean } | null>(null);
 
@@ -24,7 +32,13 @@ export default function LibraryPanel({ onClose }: Props) {
   const startEdit = (character: Character) => setEditing({ character, isNew: false });
 
   const handleSave = (character: Character) => {
+    const before = characters.find((c) => c.id === character.id);
     upsertCharacter(character);
+    if (editing?.isNew) setQuery('characters')(''); // don't hide the new character behind the search
+    // Renamed? Update every Dialogue / Ending card that uses this character.
+    if (before && before.name.trim() !== character.name.trim()) {
+      useFlowStore.getState().renameCharacterRefs(character.id, before.name, character.name.trim());
+    }
     setEditing(null);
   };
 
@@ -70,7 +84,7 @@ export default function LibraryPanel({ onClose }: Props) {
               Variables
             </TabButton>
             <TabButton active={tab === 'scenes'} onClick={() => setTab('scenes')}>
-              Scene
+              Scenes
             </TabButton>
           </div>
 
@@ -83,27 +97,34 @@ export default function LibraryPanel({ onClose }: Props) {
                 >
                   + Character
                 </button>
+                {characters.length > 0 && (
+                  <LibrarySearch
+                    value={queries.characters}
+                    onChange={setQuery('characters')}
+                    placeholder="Search characters"
+                    shown={shownCharacters.length}
+                    total={characters.length}
+                  />
+                )}
               </div>
               <div className="flex-1 overflow-y-auto p-3 space-y-2">
                 {characters.length === 0 ? (
                   <p className="text-sm text-ink-500 italic text-center mt-6">
                     No characters yet. Click “+ Character” to create one.
                   </p>
+                ) : shownCharacters.length === 0 ? (
+                  <NoMatches what="characters" query={queries.characters} />
                 ) : (
-                  characters.map((c) => (
+                  shownCharacters.map((c) => (
                     <CharacterCard key={c.id} character={c} onClick={() => startEdit(c)} />
                   ))
                 )}
               </div>
             </div>
           ) : tab === 'variables' ? (
-            <VariablesTab />
+            <VariablesTab query={queries.variables} onQuery={setQuery('variables')} />
           ) : (
-            <div className="flex-1 flex items-center justify-center p-6">
-              <p className="text-sm text-ink-500 italic text-center">
-                Scenes coming soon.
-              </p>
-            </div>
+            <ScenesTab query={queries.scenes} onQuery={setQuery('scenes')} />
           )}
         </>
       )}
@@ -160,6 +181,7 @@ function CharacterCard({
         </div>
         <div className="text-xs text-gray-400 truncate">
           {[
+            character.gender?.trim() ?? '',
             character.outfits.length ? `${character.outfits.length} outfit${character.outfits.length > 1 ? 's' : ''}` : '',
             stats ? `${stats} stat${stats > 1 ? 's' : ''}` : '',
           ]

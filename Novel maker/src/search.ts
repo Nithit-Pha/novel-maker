@@ -3,6 +3,7 @@
 
 import type { Node } from '@xyflow/react';
 import type { NodeData } from './types';
+import { isSavePoint } from './runtime/core.js';
 
 export type FlowNode = Node<NodeData>;
 
@@ -85,6 +86,7 @@ export function searchableText(node: FlowNode): string {
   else if (d.kind === 'end') parts.push(d.title ?? '', d.description ?? '', d.character ?? '', d.text ?? '');
   else parts.push(d.label ?? '');
   parts.push(...(d.tags ?? []));
+  if (isSavePoint(node)) parts.push('save point');
   return parts.join(' \n ').toLowerCase();
 }
 

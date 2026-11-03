@@ -65,7 +65,11 @@ export default function CharacterEditor({ initial, onSave, onCancel, onDelete, i
       void alertDialog({ title: 'Name needed', message: 'Please give your character a name.' });
       return;
     }
-    onSave(draft);
+    const gender = draft.gender?.trim();
+    const out = { ...draft };
+    if (gender) out.gender = gender;
+    else delete out.gender;
+    onSave(out);
   };
 
   const label = 'block text-[10px] uppercase tracking-wider text-gray-400 mb-1';
@@ -75,7 +79,9 @@ export default function CharacterEditor({ initial, onSave, onCancel, onDelete, i
     'text-xs text-accent-dialog hover:text-white border border-ink-600 hover:border-accent-dialog rounded px-2 py-0.5 transition';
 
   return (
-    <div className="flex flex-col h-full">
+    // flex-1 + min-h-0 (not h-full): the panel header sits above this, so h-full
+    // would push the footer with the Create button off the bottom of the screen.
+    <div className="flex flex-col flex-1 min-h-0">
       {/* header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-ink-600 flex-shrink-0">
         <button
@@ -117,7 +123,32 @@ export default function CharacterEditor({ initial, onSave, onCancel, onDelete, i
             placeholder="e.g. Sarah"
             className={input}
             autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSave();
+              }
+            }}
           />
+        </div>
+
+        {/* Gender */}
+        <div>
+          <label className={label} htmlFor="character-gender">Gender (optional)</label>
+          <input
+            id="character-gender"
+            list="character-gender-options"
+            value={draft.gender ?? ''}
+            onChange={(e) => patch({ gender: e.target.value })}
+            placeholder="e.g. Female, Male, Non-binary…"
+            className={input}
+          />
+          <datalist id="character-gender-options">
+            <option value="Female" />
+            <option value="Male" />
+            <option value="Non-binary" />
+            <option value="Unknown" />
+          </datalist>
         </div>
 
         {/* Image */}
@@ -224,15 +255,15 @@ export default function CharacterEditor({ initial, onSave, onCancel, onDelete, i
       <div className="flex items-center gap-2 px-4 py-3 border-t border-ink-600 flex-shrink-0">
         <button
           onClick={onCancel}
-          className="flex-1 text-sm text-gray-300 hover:text-white border border-ink-600 rounded py-1.5 transition"
+          className="nf-btn nf-btn-outline flex-1 h-9"
         >
           Cancel
         </button>
         <button
           onClick={handleSave}
-          className="flex-1 text-sm bg-accent hover:brightness-110 text-on-accent rounded py-1.5 transition font-semibold"
+          className="nf-btn nf-btn-primary flex-1 h-9"
         >
-          Save Character
+          {isNew ? 'Create character' : 'Save changes'}
         </button>
       </div>
     </div>

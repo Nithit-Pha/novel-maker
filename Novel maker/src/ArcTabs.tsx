@@ -1,6 +1,11 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Copy, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { alertDialog, confirmDialog } from './ui/dialogs';
-import { useEffect, useRef, useState } from 'react';
+import { MenuItem } from './ui/Dropdown';
 import { useFlowStore } from './store';
+
+const MENU_W = 176;
 
 export default function ArcTabs() {
   const arcs = useFlowStore((s) => s.arcs);
@@ -14,20 +19,51 @@ export default function ArcTabs() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
-  const [menuId, setMenuId] = useState<string | null>(null);
+  /** Open arc menu: which arc, and the ⋯ button it belongs to (for positioning). */
+  const [menu, setMenu] = useState<{ arcId: string; anchor: HTMLElement } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const stripRef = useRef<HTMLDivElement>(null);
+
+  // The strip scrolls sideways, which would clip a menu inside it — so the menu
+  // is drawn on top of the page (portal) at the ⋯ button's position.
+  useLayoutEffect(() => {
+    if (!menu) return setPos(null);
+    const r = menu.anchor.getBoundingClientRect();
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - MENU_W - 8));
+    setPos({ left, top: r.bottom + 6 });
+  }, [menu]);
 
   useEffect(() => {
-    if (!menuId) return;
+    if (!menu) return;
+    const close = () => setMenu(null);
     const onDoc = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuId(null);
+      const t = e.target as Node;
+      if (menuRef.current?.contains(t) || menu.anchor.contains(t)) return;
+      close();
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        close();
+        menu.anchor.focus();
+      }
+    };
+    const strip = stripRef.current;
     window.addEventListener('mousedown', onDoc);
-    return () => window.removeEventListener('mousedown', onDoc);
-  }, [menuId]);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', close);
+    strip?.addEventListener('scroll', close);
+    menuRef.current?.querySelector('button')?.focus();
+    return () => {
+      window.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', close);
+      strip?.removeEventListener('scroll', close);
+    };
+  }, [menu]);
 
   const startRename = (id: string, name: string) => {
-    setMenuId(null);
+    setMenu(null);
     setEditingId(id);
     setDraft(name);
   };
@@ -37,7 +73,7 @@ export default function ArcTabs() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    setMenuId(null);
+    setMenu(null);
     if (arcs.length <= 1) {
       void alertDialog({ title: 'Keep at least one arc', message: 'A story needs at least one arc page.' });
       return;
@@ -51,16 +87,22 @@ export default function ArcTabs() {
     if (ok) deleteArc(id);
   };
 
+  const menuArc = menu ? arcs.find((a) => a.id === menu.arcId) : undefined;
+
   return (
-    <div className="h-10 bg-bg border-b border-border flex items-stretch px-2 sm:px-3 gap-1 flex-shrink-0 overflow-x-auto">
+    <div
+      ref={stripRef}
+      className="h-10 bg-bg border-b border-border flex items-stretch px-2 sm:px-3 gap-1 flex-shrink-0 overflow-x-auto"
+    >
       <span className="self-center font-story italic text-[14px] text-fg-soft pl-1 pr-2 select-none truncate max-w-[220px]" title="Project">
         {projectTitle}
       </span>
       <span className="self-center text-faint pr-1 select-none">/</span>
       {arcs.map((arc) => {
         const active = arc.id === activeArcId;
+        const open = menu?.arcId === arc.id;
         return (
-          <div key={arc.id} className="relative flex items-center">
+          <div key={arc.id} className="flex items-center flex-shrink-0">
             {editingId === arc.id ? (
               <input
                 autoFocus
@@ -71,39 +113,37 @@ export default function ArcTabs() {
                   if (e.key === 'Enter') commitRename();
                   if (e.key === 'Escape') setEditingId(null);
                 }}
-                className="my-1 bg-ink-900 border border-accent text-white text-xs px-2 rounded w-28 focus:outline-none"
+                className="nf-input !h-7 !py-0 !text-[12.5px] w-32"
+                aria-label="Arc name"
               />
             ) : (
-              <button
-                onClick={() => setActiveArc(arc.id)}
-                onDoubleClick={() => startRename(arc.id, arc.name)}
-                className={`my-1.5 pl-3 pr-1 h-7 rounded-lg flex items-center gap-1 text-[12.5px] border transition-colors ${
+              <div
+                className={`my-1.5 h-7 rounded-lg flex items-center border transition-colors ${
                   active
                     ? 'text-fg border-border bg-surface font-semibold shadow-sm'
                     : 'text-muted border-transparent hover:text-fg hover:bg-surface-2'
                 }`}
-                title="Click to open · double-click to rename"
               >
-                <span className="max-w-[160px] truncate">{arc.name}</span>
-                <span
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMenuId(menuId === arc.id ? null : arc.id);
-                  }}
-                  className="px-1 text-gray-500 hover:text-white rounded"
+                <button
+                  onClick={() => setActiveArc(arc.id)}
+                  onDoubleClick={() => startRename(arc.id, arc.name)}
+                  className="pl-3 pr-1 h-full text-[12.5px] max-w-[180px] truncate rounded-l-lg"
+                  title="Click to open · double-click to rename"
                 >
-                  ⋯
-                </span>
-              </button>
-            )}
-            {menuId === arc.id && (
-              <div
-                ref={menuRef}
-                className="nf-menu animate-pop absolute top-9 left-0 w-40 text-sm"
-              >
-                <button onClick={() => startRename(arc.id, arc.name)} className="w-full text-left text-gray-200 hover:bg-ink-700 hover:text-white rounded px-2 py-1.5">Rename</button>
-                <button onClick={() => { setMenuId(null); duplicateArc(arc.id); }} className="w-full text-left text-gray-200 hover:bg-ink-700 hover:text-white rounded px-2 py-1.5">Duplicate</button>
-                <button onClick={() => handleDelete(arc.id, arc.name)} className="w-full text-left text-gray-400 hover:bg-danger/15 hover:text-danger rounded px-2 py-1.5">Delete</button>
+                  {arc.name}
+                </button>
+                <button
+                  onClick={(e) => setMenu(open ? null : { arcId: arc.id, anchor: e.currentTarget })}
+                  className={`h-6 w-6 mr-0.5 rounded-md flex items-center justify-center transition-colors ${
+                    open ? 'bg-surface-2 text-fg' : 'text-faint hover:text-fg hover:bg-surface-2'
+                  }`}
+                  aria-label={`Actions for ${arc.name}`}
+                  aria-haspopup="menu"
+                  aria-expanded={open}
+                  title="Rename, duplicate or delete"
+                >
+                  <MoreHorizontal size={14} />
+                </button>
               </div>
             )}
           </div>
@@ -111,11 +151,38 @@ export default function ArcTabs() {
       })}
       <button
         onClick={addArc}
-        className="my-1 px-2 h-7 rounded text-gray-400 hover:text-white hover:bg-ink-800 text-sm self-center"
+        className="nf-icon-btn !w-7 !h-7 self-center flex-shrink-0"
         title="Add an arc"
+        aria-label="Add an arc"
       >
-        +
+        <Plus size={15} />
       </button>
+
+      {menu &&
+        menuArc &&
+        pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            aria-label={`Actions for ${menuArc.name}`}
+            className="nf-menu animate-pop fixed"
+            style={{ left: pos.left, top: pos.top, width: MENU_W, zIndex: 60 }}
+          >
+            <MenuItem icon={<Pencil size={14} />} label="Rename" onClick={() => startRename(menuArc.id, menuArc.name)} />
+            <MenuItem
+              icon={<Copy size={14} />}
+              label="Duplicate"
+              onClick={() => {
+                setMenu(null);
+                duplicateArc(menuArc.id);
+              }}
+            />
+            <div className="nf-menu-sep" />
+            <MenuItem icon={<Trash2 size={14} />} label="Delete…" danger onClick={() => void handleDelete(menuArc.id, menuArc.name)} />
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
