@@ -9,6 +9,7 @@ import EffectsEditor from './EffectsEditor';
 export default function OnEnterSection({ id, effects }: { id: string; effects: Effect[] | undefined }) {
   const updateNodeData = useFlowStore((s) => s.updateNodeData);
   const variables = useFlowStore((s) => s.variables);
+  const classes = useFlowStore((s) => s.classes);
   const count = effects?.length ?? 0;
   const [open, setOpen] = useState(false);
 
@@ -26,7 +27,7 @@ export default function OnEnterSection({ id, effects }: { id: string; effects: E
         <span>On enter{count ? ` (${count})` : ''}</span>
         {!open && count > 0 && (
           <span className="normal-case tracking-normal text-gray-400 truncate ml-1">
-            {describeEffects(effects, variables)}
+            {describeEffects(effects, variables, classes)}
           </span>
         )}
       </button>

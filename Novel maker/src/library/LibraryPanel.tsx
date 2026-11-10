@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Library as LibraryIcon } from 'lucide-react';
+import { Library as LibraryIcon, Star } from 'lucide-react';
 import { useCharacterStore } from './characterStore';
 import { type Character, emptyCharacter } from './libraryTypes';
 import CharacterEditor from './CharacterEditor';
 import VariablesTab from './VariablesTab';
 import ScenesTab from './ScenesTab';
+import ClassesTab from './ClassesTab';
 import LibrarySearch, { NoMatches } from './LibrarySearch';
 import { filterCharacters } from './libraryFilter';
 import { useFlowStore } from '../store';
@@ -13,7 +14,7 @@ interface Props {
   onClose: () => void;
 }
 
-type Tab = 'characters' | 'variables' | 'scenes';
+type Tab = 'characters' | 'variables' | 'classes' | 'scenes';
 
 export default function LibraryPanel({ onClose }: Props) {
   const characters = useCharacterStore((s) => s.characters);
@@ -22,7 +23,7 @@ export default function LibraryPanel({ onClose }: Props) {
 
   const [tab, setTab] = useState<Tab>('characters');
   // One search per tab; kept while the Library is open.
-  const [queries, setQueries] = useState<Record<Tab, string>>({ characters: '', variables: '', scenes: '' });
+  const [queries, setQueries] = useState<Record<Tab, string>>({ characters: '', variables: '', classes: '', scenes: '' });
   const setQuery = (t: Tab) => (q: string) => setQueries((qs) => ({ ...qs, [t]: q }));
   const shownCharacters = filterCharacters(characters, queries.characters);
   // null = list view; otherwise the character being edited (+ whether it's new)
@@ -31,9 +32,14 @@ export default function LibraryPanel({ onClose }: Props) {
   const startNew = () => setEditing({ character: emptyCharacter(), isNew: true });
   const startEdit = (character: Character) => setEditing({ character, isNew: false });
 
-  const handleSave = (character: Character) => {
+  const mainId = useFlowStore((s) => s.mainCharacterIds[0] ?? null);
+  const setMain = (id: string | null) => useFlowStore.getState().setMainCharacter(id);
+
+  const handleSave = (character: Character, main: boolean) => {
     const before = characters.find((c) => c.id === character.id);
     upsertCharacter(character);
+    if (main && mainId !== character.id) setMain(character.id);
+    else if (!main && mainId === character.id) setMain(null);
     if (editing?.isNew) setQuery('characters')(''); // don't hide the new character behind the search
     // Renamed? Update every Dialogue / Ending card that uses this character.
     if (before && before.name.trim() !== character.name.trim()) {
@@ -43,6 +49,7 @@ export default function LibraryPanel({ onClose }: Props) {
   };
 
   const handleDelete = (id: string) => {
+    if (mainId === id) setMain(null);
     deleteCharacter(id);
     setEditing(null);
   };
@@ -70,6 +77,7 @@ export default function LibraryPanel({ onClose }: Props) {
           initial={editing.character}
           isNew={editing.isNew}
           onSave={handleSave}
+          isMain={mainId === editing.character.id}
           onCancel={() => setEditing(null)}
           onDelete={handleDelete}
         />
@@ -82,6 +90,9 @@ export default function LibraryPanel({ onClose }: Props) {
             </TabButton>
             <TabButton active={tab === 'variables'} onClick={() => setTab('variables')}>
               Variables
+            </TabButton>
+            <TabButton active={tab === 'classes'} onClick={() => setTab('classes')}>
+              Classes
             </TabButton>
             <TabButton active={tab === 'scenes'} onClick={() => setTab('scenes')}>
               Scenes
@@ -116,13 +127,21 @@ export default function LibraryPanel({ onClose }: Props) {
                   <NoMatches what="characters" query={queries.characters} />
                 ) : (
                   shownCharacters.map((c) => (
-                    <CharacterCard key={c.id} character={c} onClick={() => startEdit(c)} />
+                    <CharacterCard
+                      key={c.id}
+                      character={c}
+                      isMain={mainId === c.id}
+                      onToggleMain={() => setMain(mainId === c.id ? null : c.id)}
+                      onClick={() => startEdit(c)}
+                    />
                   ))
                 )}
               </div>
             </div>
           ) : tab === 'variables' ? (
             <VariablesTab query={queries.variables} onQuery={setQuery('variables')} />
+          ) : tab === 'classes' ? (
+            <ClassesTab query={queries.classes} onQuery={setQuery('classes')} />
           ) : (
             <ScenesTab query={queries.scenes} onQuery={setQuery('scenes')} />
           )}
@@ -157,16 +176,23 @@ function TabButton({
 
 function CharacterCard({
   character,
+  isMain,
+  onToggleMain,
   onClick,
 }: {
   character: Character;
+  isMain: boolean;
+  onToggleMain: () => void;
   onClick: () => void;
 }) {
   const stats = character.personality.length + character.abilities.length;
   return (
+    <div className="relative">
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-3 bg-ink-900 hover:bg-ink-700 border border-ink-600 hover:border-accent-dialog rounded-lg p-2.5 text-left transition"
+      className={`w-full flex items-center gap-3 bg-ink-900 hover:bg-ink-700 border hover:border-accent-dialog rounded-lg p-2.5 pr-11 text-left transition ${
+        isMain ? 'border-accent/70' : 'border-ink-600'
+      }`}
     >
       <div className="w-12 h-12 rounded-md bg-ink-800 border border-ink-600 overflow-hidden flex items-center justify-center flex-shrink-0">
         {character.image ? (
@@ -176,8 +202,13 @@ function CharacterCard({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold text-white truncate">
-          {character.name || 'Unnamed'}
+        <div className="text-sm font-semibold text-white truncate flex items-center gap-1.5">
+          <span className="truncate">{character.name || 'Unnamed'}</span>
+          {isMain && (
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-accent bg-accent/10 rounded px-1.5 py-0.5 flex-shrink-0">
+              Main · you
+            </span>
+          )}
         </div>
         <div className="text-xs text-gray-400 truncate">
           {[
@@ -190,5 +221,15 @@ function CharacterCard({
         </div>
       </div>
     </button>
+    <button
+      onClick={onToggleMain}
+      className={`absolute right-2 top-1/2 -translate-y-1/2 nf-icon-btn !w-8 !h-8 ${isMain ? '!text-accent' : 'opacity-50 hover:opacity-100'}`}
+      title={isMain ? 'Main character (you) — click to unset' : 'Make main character (you): the Status panel shows their portrait and name'}
+      aria-label={isMain ? 'Unset main character' : 'Make main character'}
+      aria-pressed={isMain}
+    >
+      <Star size={16} fill={isMain ? 'currentColor' : 'none'} />
+    </button>
+    </div>
   );
 }

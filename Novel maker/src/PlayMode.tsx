@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowLeft, ArrowRight, Bookmark, FlaskConical, Lock, Map as MapIcon, RotateCcw, SkipBack, Trophy, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Backpack, Bookmark, ChevronDown, FlaskConical, Lock, Map as MapIcon, RotateCcw, SkipBack, Trophy, X } from 'lucide-react';
 import type {
   ChanceData,
   ChapterData,
@@ -8,13 +8,21 @@ import type {
   EndData,
   LoopData,
   NodeKind,
+  ClassDef,
+  ClassPickData,
   SceneData,
+  StatusData,
   VariableDef,
 } from './types';
 import type { Project } from './project';
 import {
   buildIndex,
   checkpointStep,
+  classOptions,
+  className,
+  currentClasses,
+  describeEffects,
+  pickClass,
   choiceState,
   choose,
   currentNode,
@@ -29,6 +37,7 @@ import {
   restartArc,
   startPlay,
   startAt,
+  statusView,
   type PlayState,
   type Vars,
 } from './engine';
@@ -39,12 +48,13 @@ import { NODE_ICONS } from './ui/icons';
 import { useCharacterStore } from './library/characterStore';
 import { sceneSrc, useSceneStore } from './library/sceneStore';
 import { nodeTitle, type FlowNode } from './search';
+import StatusPanel from './play/StatusPanel';
 
 interface Props {
   project: Project;
   onClose: () => void;
   /** "Play from here": start at this card with these variable values (and the background showing there). */
-  start?: { arcId: string; nodeId: string; vars: Vars; scene?: string | null };
+  start?: { arcId: string; nodeId: string; vars: Vars; scene?: string | null; hud?: string[] | null };
   /** "Play this route": replay these steps first (Back still works). */
   route?: Route;
 }
@@ -54,7 +64,9 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
   // All play rules come from runtime/core.js — the same code the exported HTML runs.
   const index = useMemo(() => buildIndex(project), [project]);
   const fresh = () =>
-    start ? startAt(index, start.arcId, start.nodeId, start.vars, undefined, undefined, start.scene) : startPlay(index, project.activeArcId);
+    start
+      ? startAt(index, start.arcId, start.nodeId, start.vars, undefined, undefined, start.scene, start.hud)
+      : startPlay(index, project.activeArcId);
 
   // Replayed route → its states become the history, so Back walks through it.
   const replayed = useMemo(() => (route ? replayRoute(project, route) : null), [project, route]);
@@ -63,6 +75,7 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
   /** actions[i] = what the reader did at history[i] (for the "Your route" recap). */
   const [actions, setActions] = useState<RouteAction[]>(() => (route ? route.steps.map((s) => s.action) : []));
   const [showVars, setShowVars] = useState(false);
+  const [hudOpen, setHudOpen] = useState(false); // phones: the HUD bar is collapsed by default
   const [recap, setRecap] = useState<'route' | 'endings' | null>(null);
   const galleryKey = project.meta.title;
   const [seen, setSeen] = useState<string[]>(() => readSeenEndings(galleryKey));
@@ -138,7 +151,7 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
       else if (e.key === 'ArrowLeft' || e.key === 'Backspace') k.goBack();
       else if (e.key === 'ArrowRight' || e.key === ' ') {
         const type = k.current?.type;
-        if (type === 'chapter' || type === 'scene' || type === 'dialog' || type === 'chance') {
+        if (type === 'chapter' || type === 'scene' || type === 'dialog' || type === 'chance' || type === 'status' || type === 'classpick') {
           e.preventDefault();
           k.goNext();
         }
@@ -149,6 +162,17 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
   }, []);
 
   const noStory = !arc;
+  // Status HUD: the groups the writer switched on (state.hud), live values.
+  // Not while a Status card is on screen — it already shows the same list.
+  const hudGroups = state.hud && current?.type !== 'status' ? statusView(project.variables, state.vars, state.hud) : null;
+  const hudCount = hudGroups ? hudGroups.reduce((n, g) => n + g.rows.length, 0) : 0;
+  const classes = project.classes ?? [];
+  const myClasses = currentClasses(classes, state.vars);
+  const classLine = myClasses.length ? myClasses.map((c, i) => (i === 0 ? className(classes, c.id) : c.name)).join(' · ') : undefined;
+  // The main character ("you") — whose status this is.
+  const allCharacters = useCharacterStore((s) => s.characters);
+  const mainChar = allCharacters.find((c) => c.id === project.mainCharacterIds?.[0]);
+  const who = mainChar ? { name: mainChar.name || 'You', image: mainChar.image } : undefined;
   const canNext = hasNext(index, state);
   const endingCount = useMemo(() => project.arcs.reduce((n, a) => n + a.nodes.filter((x) => x.type === 'end').length, 0), [project]);
   const foundCount = useMemo(
@@ -232,8 +256,27 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
       </div>
 
       <div className="flex-1 flex min-h-0">
-        <div className="flex-1 relative flex items-center justify-center px-5 sm:px-8 py-10 overflow-auto">
+        <div className={`flex-1 relative flex items-center justify-center px-5 sm:px-8 py-10 overflow-auto ${hudGroups ? 'pt-16 md:pt-10' : ''}`}>
           <SceneBackdrop src={bgSrc} name={sceneNow?.name} />
+          {hudGroups && (
+            <div className="md:hidden absolute top-3 left-3 right-3 z-10 nf-hud-bar">
+              <button
+                onClick={() => setHudOpen((v) => !v)}
+                className="w-full flex items-center gap-2 px-3 h-9 text-[13px] text-fg"
+                aria-expanded={hudOpen}
+              >
+                <Backpack size={15} className="text-accent" />
+                <span className="font-medium">Status</span>
+                <span className="text-muted">· {hudCount}</span>
+                <ChevronDown size={15} className={`ml-auto text-muted transition-transform ${hudOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {hudOpen && (
+                <div className="px-3 pb-3 max-h-[50vh] overflow-y-auto">
+                  <StatusPanel groups={hudGroups} compact hideEmpty classLine={classLine} who={who} />
+                </div>
+              )}
+            </div>
+          )}
           <div
             className={`relative w-full max-w-2xl ${bgSrc ? 'nf-reading-panel' : ''}`}
             key={`${state.arcId}:${state.currentId}:${history.length}`}
@@ -276,6 +319,7 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
                 data={current.data as DecisionData}
                 vars={state.vars}
                 variables={project.variables}
+                classes={classes}
                 isWired={(id) => isWired(current.id, edges, choiceHandle(id))}
                 onChoose={(id) => go(choose(index, state, id), { type: 'choose', choiceId: id })}
               />
@@ -296,10 +340,40 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
                 <NextButton onNext={goNext} hasNext={canNext} />
               </Card>
             )}
+            {current?.type === 'status' && (
+              <StatusCard
+                data={current.data as StatusData}
+                variables={project.variables}
+                vars={state.vars}
+                classLine={classLine}
+                who={who}
+                onNext={goNext}
+                hasNext={canNext}
+              />
+            )}
+            {current?.type === 'classpick' && (
+              <ClassPickCard
+                data={current.data as ClassPickData}
+                options={classOptions(index, state, current)}
+                classes={classes}
+                variables={project.variables}
+                onPick={(id) => go(pickClass(index, state, id), { type: 'class', classId: id })}
+                onNext={goNext}
+                hasNext={canNext}
+              />
+            )}
             {current?.type === 'end' && <EndCard data={current.data as EndData} buttons={endButtons} />}
           </div>
         </div>
 
+        {hudGroups && (
+          <aside className="hidden md:block w-64 flex-shrink-0 border-l border-border bg-surface p-4 overflow-y-auto" aria-label="Status">
+            <h2 className="text-sm font-semibold text-fg mb-3 flex items-center gap-1.5">
+              <Backpack size={15} className="text-accent" /> Status
+            </h2>
+            <StatusPanel groups={hudGroups} compact hideEmpty classLine={classLine} who={who} />
+          </aside>
+        )}
         {showVars && (
           <VariablesDrawer variables={project.variables} vars={state.vars} onChange={(vars) => setState({ ...state, vars })} />
         )}
@@ -331,6 +405,8 @@ export default function PlayMode({ project, onClose, start, route }: Props) {
           )}
           {current?.type === 'decision'
             ? 'Choose what happens next'
+            : current?.type === 'classpick' && classOptions(index, state, current).length
+            ? 'Choose one to continue'
             : current?.type === 'loop'
             ? 'Complete every item to continue'
             : current?.type === 'end'
@@ -404,6 +480,36 @@ function NextButton({ onNext, hasNext, label = 'Next' }: { onNext: () => void; h
   );
 }
 
+function StatusCard({
+  data,
+  variables,
+  vars,
+  classLine,
+  who,
+  onNext,
+  hasNext,
+}: {
+  data: StatusData;
+  variables: VariableDef[];
+  vars: Vars;
+  classLine?: string;
+  who?: { name: string; image?: string };
+  onNext: () => void;
+  hasNext: boolean;
+}) {
+  const groups = statusView(variables, vars, data.groups);
+  return (
+    <Card kind="status" kicker="Status">
+      <h2 className="font-story text-3xl sm:text-4xl text-fg leading-tight mb-3">{data.title?.trim() || 'Your status'}</h2>
+      {data.text?.trim() && <p className="font-story text-xl text-fg-soft leading-relaxed mb-6">{data.text}</p>}
+      <div className="rounded-2xl border border-border bg-surface/80 px-5 py-4 mb-10 mt-6" style={{ boxShadow: 'var(--shadow-sm)' }}>
+        <StatusPanel groups={groups} classLine={classLine} who={who} />
+      </div>
+      <NextButton onNext={onNext} hasNext={hasNext} />
+    </Card>
+  );
+}
+
 function DialogCard({ data, onNext, hasNext }: { data: DialogData; onNext: () => void; hasNext: boolean }) {
   const characters = useCharacterStore((s) => s.characters);
   const who = data.character?.trim() ?? '';
@@ -428,16 +534,78 @@ function DialogCard({ data, onNext, hasNext }: { data: DialogData; onNext: () =>
   );
 }
 
+/** The reader picks a class (or a sub-class of their current class). */
+function ClassPickCard({
+  data,
+  options,
+  classes,
+  variables,
+  onPick,
+  onNext,
+  hasNext,
+}: {
+  data: ClassPickData;
+  options: ClassDef[];
+  classes: ClassDef[];
+  variables: VariableDef[];
+  onPick: (classId: string) => void;
+  onNext: () => void;
+  hasNext: boolean;
+}) {
+  const sub = data.mode === 'subclass';
+  return (
+    <Card kind="classpick" kicker={sub ? 'Choose your path' : 'Choose your class'}>
+      <h2 className="font-story text-3xl sm:text-4xl text-fg leading-tight mb-3">
+        {data.title?.trim() || (sub ? 'Choose your path' : 'Who are you?')}
+      </h2>
+      {data.prompt?.trim() && <p className="font-story text-xl text-fg-soft leading-relaxed mb-6">{data.prompt}</p>}
+      {options.length === 0 ? (
+        <>
+          <p className="text-muted italic mb-10 mt-6">Nothing to choose here.</p>
+          <NextButton onNext={onNext} hasNext={hasNext} />
+        </>
+      ) : (
+        <div className="grid gap-2.5 mt-6 sm:grid-cols-2">
+          {options.map((c) => {
+            const gives = describeEffects(c.effects, variables, classes);
+            return (
+              <button
+                key={c.id}
+                onClick={() => onPick(c.id)}
+                className="text-left bg-surface hover:bg-surface-2 border border-border hover:border-node rounded-xl px-4 py-3.5 transition-colors"
+                style={{ boxShadow: 'var(--shadow-sm)' }}
+              >
+                <div className="flex items-center gap-2.5">
+                  {c.icon && (
+                    <span className="text-2xl leading-none" aria-hidden>
+                      {c.icon}
+                    </span>
+                  )}
+                  <span className="text-[18px] font-medium text-fg">{c.name || '(unnamed class)'}</span>
+                </div>
+                {c.description?.trim() && <p className="text-[14px] text-fg-soft mt-1.5 leading-snug">{c.description}</p>}
+                {gives && <p className="text-[12px] text-muted mt-1.5">{gives}</p>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function DecisionCard({
   data,
   vars,
   variables,
+  classes,
   isWired,
   onChoose,
 }: {
   data: DecisionData;
   vars: Vars;
   variables: VariableDef[];
+  classes: ClassDef[];
   isWired: (choiceId: string) => boolean;
   onChoose: (choiceId: string) => void;
 }) {
@@ -462,7 +630,7 @@ function DecisionCard({
                   <span className="text-[17px]">{choice.label || <span className="italic">(empty choice)</span>}</span>
                 </div>
                 <div className="text-xs mt-1 ml-7 text-muted">
-                  {choice.lockedText?.trim() || `Requires ${describeCondition(choice.condition, variables)}`}
+                  {choice.lockedText?.trim() || `Requires ${describeCondition(choice.condition, variables, classes)}`}
                 </div>
               </div>
             );

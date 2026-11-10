@@ -11,7 +11,9 @@ import {
 
 interface Props {
   initial: Character;
-  onSave: (character: Character) => void;
+  onSave: (character: Character, main: boolean) => void;
+  /** This character is the main character ("you"). */
+  isMain?: boolean;
   onCancel: () => void;
   onDelete?: (id: string) => void;
   /** true when this is a freshly-created character (hide Delete). */
@@ -20,8 +22,9 @@ interface Props {
 
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024; // 3 MB guard
 
-export default function CharacterEditor({ initial, onSave, onCancel, onDelete, isNew }: Props) {
+export default function CharacterEditor({ initial, onSave, onCancel, onDelete, isNew, isMain = false }: Props) {
   const [draft, setDraft] = useState<Character>(initial);
+  const [main, setMain] = useState(isMain);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const patch = (p: Partial<Character>) => setDraft((d) => ({ ...d, ...p }));
@@ -69,7 +72,7 @@ export default function CharacterEditor({ initial, onSave, onCancel, onDelete, i
     const out = { ...draft };
     if (gender) out.gender = gender;
     else delete out.gender;
-    onSave(out);
+    onSave(out, main);
   };
 
   const label = 'block text-[10px] uppercase tracking-wider text-gray-400 mb-1';
@@ -131,6 +134,17 @@ export default function CharacterEditor({ initial, onSave, onCancel, onDelete, i
             }}
           />
         </div>
+
+        {/* Main character */}
+        <label className="flex items-start gap-2 text-sm text-gray-300 cursor-pointer select-none">
+          <input type="checkbox" checked={main} onChange={(e) => setMain(e.target.checked)} className="mt-0.5" />
+          <span>
+            <span className="text-white font-medium">Main character (you)</span>
+            <span className="block text-[11px] text-gray-400 leading-snug">
+              The Status panel shows their portrait and name. One per story — picking this moves it from anyone else.
+            </span>
+          </span>
+        </label>
 
         {/* Gender */}
         <div>

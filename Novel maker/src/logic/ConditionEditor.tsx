@@ -2,6 +2,7 @@ import { useFlowStore } from '../store';
 import { newId } from '../project';
 import type { Clause, Cmp, Condition, VarType } from '../types';
 import { RemoveButton, VarSelect, VarValueInput, fieldCls, stop } from './fields';
+import ClassSelect from './ClassSelect';
 
 const CMPS: Record<VarType, { cmp: Cmp; label: string }[]> = {
   number: [
@@ -35,6 +36,7 @@ export default function ConditionEditor({
   emptyText?: string;
 }) {
   const variables = useFlowStore((s) => s.variables);
+  const classes = useFlowStore((s) => s.classes);
   const cond = condition ?? EMPTY_CONDITION;
   const typeOf = (varId: string) => variables.find((v) => v.id === varId)?.type;
 
@@ -74,6 +76,24 @@ export default function ConditionEditor({
         </div>
       )}
       {cond.clauses.map((cl) => {
+        if (cl.kind === 'class') {
+          return (
+            <div key={cl.id} className="flex items-center gap-1">
+              <span className="text-[11px] text-accent-classpick font-medium px-1">Class</span>
+              <select
+                value={cl.cmp === '!=' ? '!=' : '=='}
+                onChange={(e) => update(cl.id, { cmp: e.target.value as Cmp })}
+                onMouseDown={stop}
+                className={fieldCls}
+              >
+                <option value="==">is</option>
+                <option value="!=">is not</option>
+              </select>
+              <ClassSelect value={cl.classId} classes={classes} onChange={(classId) => update(cl.id, { classId })} />
+              <RemoveButton onClick={() => setClauses(cond.clauses.filter((c) => c.id !== cl.id))} title="Remove this rule" />
+            </div>
+          );
+        }
         const t = typeOf(cl.varId);
         return (
           <div key={cl.id} className="flex items-center gap-1">
@@ -99,9 +119,22 @@ export default function ConditionEditor({
           </div>
         );
       })}
-      <button onClick={add} className="text-[11px] text-accent-condition hover:text-white">
-        + rule
-      </button>
+      <div className="flex items-center gap-3">
+        <button onClick={add} className="text-[11px] text-accent-condition hover:text-white">
+          + rule
+        </button>
+        {classes.length > 0 && (
+          <button
+            onClick={() =>
+              setClauses([...cond.clauses, { id: newId(), kind: 'class', classId: classes.find((c) => !c.parentId)?.id ?? classes[0].id, cmp: '==', varId: '', value: '' }])
+            }
+            className="text-[11px] text-accent-classpick hover:text-white"
+            title="Only when the reader is (or isn't) a class — a class includes its sub-classes"
+          >
+            + class rule
+          </button>
+        )}
+      </div>
     </div>
   );
 }

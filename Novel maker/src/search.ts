@@ -26,6 +26,10 @@ export function nodeIcon(node: FlowNode): string {
       return '🧭';
     case 'chance':
       return '🎲';
+    case 'status':
+      return '🎒';
+    case 'classpick':
+      return '⚔️';
     case 'end':
       return '🏁';
     default:
@@ -52,6 +56,8 @@ export function nodeTitle(node: FlowNode): string {
   if (d.kind === 'chapter') return truncate(d.name?.trim(), 60) || 'Chapter';
   if (d.kind === 'condition') return truncate(d.title?.trim(), 60) || 'Condition';
   if (d.kind === 'chance') return truncate(d.title?.trim(), 60) || 'Chance';
+  if (d.kind === 'status') return truncate(d.title?.trim(), 60) || 'Status';
+  if (d.kind === 'classpick') return truncate(d.title?.trim(), 60) || (d.mode === 'subclass' ? 'Choose sub-class' : 'Choose class');
   if (d.kind === 'end') return truncate(d.title?.trim(), 60) || 'Ending';
   // portal
   return d.label?.trim() || 'Go to Arc';
@@ -67,6 +73,8 @@ export function nodeBody(node: FlowNode): string {
   if (d.kind === 'chapter') return d.name ?? '';
   if (d.kind === 'condition') return [d.title, ...(d.branches ?? []).map((b) => b.label)].filter(Boolean).join(' · ');
   if (d.kind === 'chance') return [d.title, ...(d.outcomes ?? []).map((o) => o.label)].filter(Boolean).join(' · ');
+  if (d.kind === 'status') return [d.title, d.text, ...(d.groups ?? [])].filter(Boolean).join(' · ');
+  if (d.kind === 'classpick') return [d.title, d.prompt].filter(Boolean).join(' · ');
   if (d.kind === 'end')
     return [d.title, d.description, d.text ? `${d.character ? `${d.character}: ` : ''}${d.text}` : ''].filter(Boolean).join(' · ');
   return d.label ?? '';
@@ -83,6 +91,8 @@ export function searchableText(node: FlowNode): string {
   else if (d.kind === 'chapter') parts.push(d.name ?? '');
   else if (d.kind === 'condition') parts.push(d.title ?? '', ...(d.branches ?? []).map((b) => b.label));
   else if (d.kind === 'chance') parts.push(d.title ?? '', ...(d.outcomes ?? []).map((o) => o.label));
+  else if (d.kind === 'status') parts.push('status', d.title ?? '', d.text ?? '', ...(d.groups ?? []));
+  else if (d.kind === 'classpick') parts.push('class', d.title ?? '', d.prompt ?? '');
   else if (d.kind === 'end') parts.push(d.title ?? '', d.description ?? '', d.character ?? '', d.text ?? '');
   else parts.push(d.label ?? '');
   parts.push(...(d.tags ?? []));

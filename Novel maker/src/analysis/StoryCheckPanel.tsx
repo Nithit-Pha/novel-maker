@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { snapshotProject, useFlowStore } from '../store';
+import { className } from '../engine';
 import type { NodeData, NodeKind } from '../types';
 import { NODE_ICONS } from '../ui/icons';
 import { nodeTitle } from '../search';
@@ -248,6 +249,15 @@ function EndingRow({ e, loops, truncated }: { e: EndingResult; loops: boolean; t
             )}
             {e.reachable && <span className="text-[11.5px] text-muted">{routesText(e, loops)}</span>}
           </div>
+          {e.classes && e.classes.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1 nf-kind-classpick" title="Classes that can reach this ending">
+              {e.classes.map((c) => (
+                <span key={c} className="text-[11px] rounded-full px-2 py-0.5 border border-node/40 text-node">
+                  {c}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <button className="nf-icon-btn" title="Jump to this ending" aria-label="Jump to this ending" onClick={() => focusNode(e.arcId, e.nodeId)}>
           <Crosshair size={15} />
@@ -283,6 +293,7 @@ function EndingRow({ e, loops, truncated }: { e: EndingResult; loops: boolean; t
 }
 
 function RouteSteps({ route, nodes }: { route: Route; nodes: Map<string, { node: N; arcId: string; arcName: string }> }) {
+  const classes = useFlowStore((s) => s.classes);
   const rows: { key: string; kind: NodeKind; title: string; pick: string }[] = [];
   const addRolls = (rolls: Route['initialRolls'], key: string) =>
     rolls.forEach((r, i) => {
@@ -301,6 +312,9 @@ function RouteSteps({ route, nodes }: { route: Route; nodes: Map<string, { node:
     if (n && s.action.type === 'choose' && n.data.kind === 'decision') {
       const id = s.action.choiceId;
       rows.push({ key: `s${i}`, kind: 'decision', title: n.data.prompt || 'Decision', pick: n.data.choices.find((c) => c.id === id)?.label || 'choice' });
+    } else if (n && s.action.type === 'class' && n.data.kind === 'classpick') {
+      const id = s.action.classId;
+      rows.push({ key: `s${i}`, kind: 'classpick', title: n.data.title || (n.data.mode === 'subclass' ? 'Sub-class' : 'Class'), pick: className(classes, id) });
     } else if (n && s.action.type === 'item' && n.data.kind === 'loop') {
       const id = s.action.itemId;
       rows.push({ key: `s${i}`, kind: 'loop', title: n.data.title || 'Loop', pick: n.data.items.find((it) => it.id === id)?.label || 'item' });

@@ -2,7 +2,7 @@
 // Pure and dependency-free so it's easy to test.
 
 import type { Character, SceneAsset } from './libraryTypes';
-import type { VariableDef } from '../types';
+import type { ClassDef, VariableDef } from '../types';
 
 /** Words for each variable type, so "flag" or "counter" finds them too. */
 const TYPE_WORDS: Record<string, string> = {
@@ -41,3 +41,10 @@ export function sceneText(s: SceneAsset): string {
 export const filterCharacters = (list: Character[], q: string) => list.filter((c) => matchesQuery(characterText(c), q));
 export const filterVariables = (list: VariableDef[], q: string) => list.filter((v) => matchesQuery(variableText(v), q));
 export const filterScenes = (list: SceneAsset[], q: string) => list.filter((s) => matchesQuery(sceneText(s), q));
+
+/** Classes matching the query, plus the parent of any matching sub-class (so it shows under it). */
+export function filterClasses(list: ClassDef[], q: string): ClassDef[] {
+  const hit = new Set(list.filter((c) => matchesQuery([c.name, c.description ?? '', c.icon ?? ''].join(' \n '), q)).map((c) => c.id));
+  for (const c of list) if (c.parentId && hit.has(c.id)) hit.add(c.parentId);
+  return list.filter((c) => hit.has(c.id));
+}

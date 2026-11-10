@@ -2,7 +2,7 @@
 // graph (nodes + edges). Shared by the store, players, and the exporter.
 
 import type { Edge, Node } from '@xyflow/react';
-import type { NodeData, VariableDef, VarType } from './types';
+import type { ClassDef, Effect, NodeData, VariableDef, VarType, VarShow } from './types';
 
 export interface Arc {
   id: string;
@@ -19,6 +19,34 @@ export interface Project {
   arcs: Arc[];
   /** Story variables (flags, counters, text), shared by every arc. */
   variables: VariableDef[];
+  /** Classes and sub-classes the reader can become (missing in older saves = none). */
+  classes?: ClassDef[];
+  /**
+   * The main character(s) — "you": whose class, items and stats the Status panel
+   * shows. One for now; a list so a later Party mode can hold several.
+   */
+  mainCharacterIds?: string[];
+}
+
+/** Keep only well-formed classes; sub-classes must point at an existing top-level class. */
+export function migrateClasses(raw: unknown): ClassDef[] {
+  if (!Array.isArray(raw)) return [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const list: ClassDef[] = raw.flatMap((c: any) => {
+    if (!c || typeof c !== 'object') return [];
+    const out: ClassDef = {
+      id: String(c.id || newId()),
+      name: String(c.name ?? ''),
+      effects: Array.isArray(c.effects) ? (c.effects.filter((e: unknown) => e && typeof e === 'object') as Effect[]) : [],
+    };
+    if (c.icon != null && String(c.icon).trim()) out.icon = String(c.icon).trim();
+    if (c.description != null && String(c.description)) out.description = String(c.description);
+    if (c.parentId) out.parentId = String(c.parentId);
+    return [out];
+  });
+  const top = new Set(list.filter((c) => !c.parentId).map((c) => c.id));
+  for (const c of list) if (c.parentId && !top.has(c.parentId)) delete c.parentId; // orphan → its own class
+  return list;
 }
 
 const VAR_TYPES: VarType[] = ['bool', 'number', 'text'];
@@ -32,8 +60,23 @@ export function migrateVariables(raw: unknown): VariableDef[] {
     const type: VarType = VAR_TYPES.includes(v.type) ? v.type : 'number';
     const initial =
       type === 'bool' ? v.initial === true : type === 'number' ? Number(v.initial) || 0 : String(v.initial ?? '');
-    return [{ id: String(v.id || newId()), name: String(v.name ?? ''), type, initial, note: v.note ? String(v.note) : undefined }];
+    const out: VariableDef = { id: String(v.id || newId()), name: String(v.name ?? ''), type, initial, note: v.note ? String(v.note) : undefined };
+    const show = migrateShow(v.show);
+    if (show) out.show = show;
+    return [out];
   });
+}
+
+/** Keep a variable's "Show to reader" settings (dropping anything malformed). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function migrateShow(raw: any): VarShow | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const show: VarShow = { group: String(raw.group ?? '').trim() || 'Items' };
+  if (raw.label != null && String(raw.label).trim()) show.label = String(raw.label);
+  if (raw.icon != null && String(raw.icon).trim()) show.icon = String(raw.icon).trim();
+  const max = Number(raw.max);
+  if (raw.max != null && isFinite(max) && max > 0) show.max = max;
+  return show;
 }
 
 export function newId(): string {
@@ -146,6 +189,10 @@ export function migrateProject(raw: unknown): Project {
       activeArcId,
       arcs,
       variables: migrateVariables(data.variables),
+      classes: migrateClasses(data.classes),
+      mainCharacterIds: Array.isArray(data.mainCharacterIds)
+        ? [...new Set(data.mainCharacterIds.filter((x: unknown) => typeof x === 'string' && x))].slice(0, 1) as string[]
+        : [],
     };
   }
   // v1: single graph
@@ -156,7 +203,7 @@ export function migrateProject(raw: unknown): Project {
     edges: Array.isArray(data?.edges) ? data.edges : [],
     nextId: data?.nextId ?? 1,
   };
-  return { version: 3, meta: { title: 'My Story' }, activeArcId: arc.id, arcs: [arc], variables: [] };
+  return { version: 3, meta: { title: 'My Story' }, activeArcId: arc.id, arcs: [arc], variables: [], classes: [] };
 }
 
 export function emptyArc(name: string): Arc {

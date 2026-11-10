@@ -3,7 +3,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import { Bookmark, Hand, Image as ImageIcon, MousePointer2, Tag, Trash2, Wand2, X } from 'lucide-react';
+import { Backpack, Bookmark, Hand, Image as ImageIcon, MousePointer2, Tag, Trash2, Wand2, X } from 'lucide-react';
+import HudPicker from '../logic/HudPicker';
 import { canSavePoint } from '../runtime/core.js';
 import { useView } from '../ui/viewPrefs';
 import { useFlowStore } from '../store';
@@ -80,6 +81,14 @@ export function SelectionBar() {
   const list = ids ? ids.split(',') : [];
   const rf = useReactFlow();
   const [picker, setPicker] = useState<HTMLElement | null>(null);
+  const [hudPicker, setHudPicker] = useState<HTMLElement | null>(null);
+  // Re-render when the selected cards' Status setting changes (the picker shows it live).
+  useFlowStore((s) =>
+    s.nodes
+      .filter((x) => x.selected)
+      .map((x) => JSON.stringify(x.data.hud ?? null))
+      .join('|')
+  );
   const [tagOpen, setTagOpen] = useState(false);
   const [tag, setTag] = useState('');
   const tagRef = useRef<HTMLInputElement>(null);
@@ -87,6 +96,7 @@ export function SelectionBar() {
   useEffect(() => {
     if (list.length < 2) {
       setPicker(null);
+      setHudPicker(null);
       setTagOpen(false);
     }
   }, [list.length]);
@@ -112,6 +122,8 @@ export function SelectionBar() {
   const st = useFlowStore.getState();
   const sceneValues = new Set(st.nodes.filter((x) => x.selected).map((x) => x.data.sceneId ?? ''));
   const common = sceneValues.size === 1 ? [...sceneValues][0] || undefined : '__mixed';
+  const hudValues = new Set(st.nodes.filter((x) => x.selected).map((x) => JSON.stringify(x.data.hud ?? null)));
+  const hudCommon = hudValues.size === 1 ? (JSON.parse([...hudValues][0]) ?? undefined) : ('__mixed' as const);
   // Save point: only cards the reader stops on. All of them on → the button turns them off.
   const saveable = st.nodes.filter((x) => x.selected && canSavePoint(x));
   const allSaved = saveable.length > 0 && saveable.every((x) => x.data.savePoint);
@@ -173,6 +185,13 @@ export function SelectionBar() {
           <Tag size={15} /> <span className="hidden sm:inline">Tag</span>
         </button>
       )}
+      <button
+        className={`${item} ${hudPicker ? 'nf-btn-active' : ''}`}
+        onClick={(e) => setHudPicker(hudPicker ? null : e.currentTarget)}
+        title="Show or hide the Status slot (items, abilities, power) from the selected cards on"
+      >
+        <Backpack size={15} /> <span className="hidden sm:inline">Status</span>
+      </button>
       {saveable.length > 0 && (
         <button
           className={`${item} ${allSaved ? 'nf-btn-active' : ''}`}
@@ -204,6 +223,19 @@ export function SelectionBar() {
       <button className="nf-icon-btn !w-8 !h-8" onClick={clear} title="Clear selection (Esc)" aria-label="Clear selection">
         <X size={15} />
       </button>
+      {hudPicker && (
+        <HudPicker
+          anchor={hudPicker}
+          value={hudCommon}
+          title={`Status slot for ${n} cards`}
+          onPick={(v) => {
+            useFlowStore.getState().setHudFor(list, v);
+            if (!v) notify(`${n} cards keep the Status slot as it is`);
+            else if (v.mode === 'hide') notify(`Status slot hidden from ${n} cards`);
+          }}
+          onClose={() => setHudPicker(null)}
+        />
+      )}
       {picker && (
         <ScenePicker
           anchor={picker}

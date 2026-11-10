@@ -102,7 +102,7 @@ export function LeftRail({ onHome, onHelp }: { onHome: () => void; onHelp: () =>
           </div>
         )}
       </Dropdown>
-      <button className="nf-icon-btn !w-9 !h-9" onClick={onHelp} title="Help & shortcuts (?)" aria-label="Help">
+      <button className="nf-icon-btn !w-9 !h-9" onClick={onHelp} title="How to use (guide) · press ? for shortcuts" aria-label="How to use">
         <CircleHelp size={18} />
       </button>
     </nav>
@@ -197,7 +197,7 @@ export function EmptyCanvas({ onAdd }: { onAdd: (k: NodeKind) => void }) {
   );
 }
 
-const SHORTCUTS: [string, string][] = [
+export const SHORTCUTS: [string, string][] = [
   ['Ctrl / ⌘ + S', 'Save now'],
   ['Ctrl / ⌘ + Z', 'Undo'],
   ['Ctrl / ⌘ + Shift + Z  ·  Ctrl + Y', 'Redo'],
@@ -215,13 +215,18 @@ const SHORTCUTS: [string, string][] = [
   ['Run mode: Esc', 'Exit'],
 ];
 
-export function HelpSheet({ onClose }: { onClose: () => void }) {
+export function HelpSheet({ onClose, onOpenGuide }: { onClose: () => void; onOpenGuide?: () => void }) {
   const [tab, setTab] = useState<'keys' | 'tips'>('keys');
   return (
     <div className="fixed inset-0 z-[2000] bg-black/30 flex items-center justify-center p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-label="Help" className="nf-panel animate-pop w-full max-w-lg max-h-[85vh] flex flex-col">
         <div className="flex items-center px-5 pt-4 pb-2">
           <h2 className="font-story text-xl text-fg flex-1">Help</h2>
+          {onOpenGuide && (
+            <button className="nf-btn nf-btn-outline !h-8 mr-1" onClick={onOpenGuide} title="Open the full How to use guide">
+              Full guide
+            </button>
+          )}
           <button className="nf-icon-btn" onClick={onClose} aria-label="Close help">
             <X size={17} />
           </button>

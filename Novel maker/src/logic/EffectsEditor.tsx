@@ -3,6 +3,7 @@ import { newId } from '../project';
 import { defaultValue } from '../engine';
 import type { Effect, EffectOp, VarType } from '../types';
 import { RemoveButton, VarSelect, VarValueInput, fieldCls, stop } from './fields';
+import ClassSelect from './ClassSelect';
 
 const OPS: Record<VarType, { op: EffectOp; label: string }[]> = {
   number: [
@@ -22,12 +23,16 @@ export default function EffectsEditor({
   effects,
   onChange,
   addLabel = '+ change a variable',
+  allowBecome = true,
 }: {
   effects: Effect[] | undefined;
   onChange: (effects: Effect[]) => void;
   addLabel?: string;
+  /** Offer "+ become a class" (off inside a class's own effects). */
+  allowBecome?: boolean;
 }) {
   const variables = useFlowStore((s) => s.variables);
+  const classes = useFlowStore((s) => s.classes);
   const list = effects ?? [];
   const typeOf = (varId: string) => variables.find((v) => v.id === varId)?.type;
 
@@ -51,6 +56,15 @@ export default function EffectsEditor({
   return (
     <div className="space-y-1">
       {list.map((fx) => {
+        if (fx.op === 'become') {
+          return (
+            <div key={fx.id} className="flex items-center gap-1">
+              <span className="text-[11px] text-accent-classpick font-medium px-1">Become</span>
+              <ClassSelect value={typeof fx.value === 'string' ? fx.value : ''} classes={classes} onChange={(value) => update(fx.id, { value })} />
+              <RemoveButton onClick={() => onChange(list.filter((x) => x.id !== fx.id))} title="Remove this change" />
+            </div>
+          );
+        }
         const t = typeOf(fx.varId);
         return (
           <div key={fx.id} className="flex items-center gap-1">
@@ -82,9 +96,20 @@ export default function EffectsEditor({
           </div>
         );
       })}
-      <button onClick={add} className="text-[11px] text-accent-condition hover:text-white">
-        {addLabel}
-      </button>
+      <div className="flex items-center gap-3">
+        <button onClick={add} className="text-[11px] text-accent-condition hover:text-white">
+          {addLabel}
+        </button>
+        {allowBecome && classes.length > 0 && (
+          <button
+            onClick={() => onChange([...list, { id: newId(), varId: '', op: 'become', value: classes.find((c) => !c.parentId)?.id ?? classes[0].id }])}
+            className="text-[11px] text-accent-classpick hover:text-white"
+            title="The reader becomes a class (its effects run). A sub-class while already in its class = promotion."
+          >
+            + become a class
+          </button>
+        )}
+      </div>
     </div>
   );
 }

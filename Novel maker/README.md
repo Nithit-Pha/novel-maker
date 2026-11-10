@@ -124,9 +124,23 @@ Variables remember what happened, so branches can **rejoin and still remember** 
 - Going back rewinds the route to that step, so **Back** and **Your route** read as a new path. Endings found stay found. On-enter effects are never applied twice.
 - Works the same in Run mode and the exported HTML. Saves last while the page is open (not stored after closing). Details: `docs/save-points-plan.md`.
 
+### Status panel — items, abilities, power
+- In **Library → Variables**, tick **Show to reader** on a variable and give it a **group** (Items, Abilities, Power or your own), a display name, an optional **emoji**, and for numbers an optional **max** (shows a bar like *7 / 10*).
+- What readers see: yes/no → listed while *yes*; numbers → the value (hidden at 0) or a bar; text → shown while not empty. Effects on choices and cards change them as usual.
+- **Status card** (add menu → *Status*): a card in the flow that shows the reader their status — a heading, optional text, and every group or the ones you pick. It plays like any card (Next, can be a save point; on-enter effects run first, so "You found a key" already shows the key).
+- **Status slot (HUD)**: the 🎒 button in any card's header → **Keep** (default) · **Show** (every group or chosen ones) · **Hide**, from that card on — like backgrounds. Readers see it live beside the text (a collapsible bar on phones). Hidden while a Status card is on screen. Also on the selection bar for many cards.
+- Readers can't open it themselves — only the writer decides. Same in Run mode and the exported HTML; save points and Back restore it. Story check warns about groups no variable uses. Details: `docs/status-panel-plan.md`.
+
+### Classes and sub-classes
+- **Library → Classes**: **+ Class** (Warrior, Mage…) and **+ Sub-class** under it (Knight, Pyromancer…). Each has an optional emoji, a description, and **"When the reader becomes this class"** changes — the same editor as choice effects (`strength = 8`, `sword = yes`, `max_hp + 20`).
+- Give the reader a class with a **Choose class** card (add menu) — they see each option's emoji, description and what it gives — or with **+ become a class** on any choice or card's on-enter changes.
+- **Sub-class (later)** mode on the Choose class card offers only sub-classes of the class the reader has (nothing to offer → Next). A promotion runs only the sub-class's changes, so stats earned on the way are kept; becoming a sub-class directly runs its class's changes first.
+- **+ class rule** in any condition: *Class is / is not Mage* — a class includes its sub-classes. Locked choices say "Requires 🔥 Mage". Condition cards can branch by class.
+- The Status panel shows "Class ⚔️ Warrior · Knight" first. "Your route" shows the picks. Story check → Routes lists which classes reach each ending, and warns about deleted classes or a Choose class card with nothing to offer. Details: `docs/classes-plan.md`.
+
 ### Canvas tools and selecting many cards
 - Bottom-centre switch: **Move** (H — drag empty canvas to move around) and **Select** (V — drag empty canvas to draw a selection box; hold **Space** to move around). **Shift+drag** selects in either tool; Ctrl/⌘+click adds a card.
-- With 2+ cards selected a bar appears at the top: **Scene ▾ · Tag · Save point · Tidy · Delete · ✕** — each is one undo step. Esc clears the selection.
+- With 2+ cards selected a bar appears at the top: **Scene ▾ · Tag · Status · Save point · Tidy · Delete · ✕** — each is one undo step. Esc clears the selection.
 
 ### Editing
 - Drag to move, scroll to zoom, drag empty space to pan (Move tool)
@@ -166,13 +180,18 @@ Variables remember what happened, so branches can **rejoin and still remember** 
 - **⬇ HTML** writes a single self-contained `.html` file — story data, styles, and a player are all inlined (character portraits and scene backgrounds embed too), so it plays in any browser **offline, with no install or server**. Double-click to play, or share the file.
 - The exported player runs the **same runtime code** as Run mode (`src/runtime/core.js` is inlined), so variables, conditions, chance, endings, loops and portals behave identically.
 
+### How to use (built-in guide)
+- **How to use** on the home page (or the ? button / ⋯ → *How to use* in the editor, shown over your project) opens a guide to every tool: cards, wires & arcs, the Library, rules & changes, Status panel, save points, Run mode, Story check, export, the launcher, shortcuts and limits. It has a topic list and a search box.
+- The text lives in `src/help/helpContent.ts` — update it with every new feature (a test fails if a card type has no help).
+
 ### Character Library
 - Click **📚 Library** in the toolbar to open a panel docked to the right side
-- Three tabs: **Character**, **Variables** and **Scenes** (see *Scenes* above)
+- Four tabs: **Character**, **Variables**, **Classes** and **Scenes** (see *Classes* and *Scenes* above)
 - The Character tab lists every character; **+ Character** at the top creates a new one
 - Each tab has a **search box**: Character searches name, gender, description, outfits, personality and abilities; Variables searches name, note and type ("flag", "counter", "text"); Scenes searches the name. Every word must match; ✕ or Esc clears; each tab keeps its own search while the Library is open
 - Each character has:
   - **Name**
+  - **Main character (you)** — the ⭐ on a character card (or the toggle in the editor). The Status card and slot show their portrait and name. One per story for now (stored as a list, ready for a future Party mode).
   - **Gender** (optional) — free text with suggestions (Female, Male, Non-binary, Unknown); shown under the name in the list
   - **Image** — upload a portrait (stored inline as a data URL, 3 MB max)
   - **Outfit** — add any number of designs, each with a name + description

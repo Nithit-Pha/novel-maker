@@ -120,11 +120,19 @@ export function initialVars(defs) {
   return vars;
 }
 
-/** Apply effects in order. Effects on unknown (deleted) variables are ignored. */
-export function applyEffects(effects, vars) {
+/**
+ * Apply effects in order. Effects on unknown (deleted) variables are ignored.
+ * `classes` (optional): the story's classes, so "become class" effects work.
+ * Without it (e.g. inside a class's own effects) "become" is ignored.
+ */
+export function applyEffects(effects, vars, classes) {
   if (!effects || effects.length === 0) return vars;
   var out = Object.assign({}, vars);
   effects.forEach(function (fx) {
+    if (fx && fx.op === 'become') {
+      if (classes) out = becomeClass(classes, out, fx.value);
+      return;
+    }
     if (!fx || !has(out, fx.varId)) return;
     var cur = out[fx.varId];
     var t = typeOfValue(cur);
@@ -137,6 +145,10 @@ export function applyEffects(effects, vars) {
 }
 
 function testClause(cl, vars) {
+  if (cl && cl.kind === 'class') {
+    var hit = !!cl.classId && (vars[CLASS_KEY] === cl.classId || vars[SUBCLASS_KEY] === cl.classId);
+    return cl.cmp === '!=' ? !hit : hit;
+  }
   if (!cl || !has(vars, cl.varId)) return false;
   var cur = vars[cl.varId];
   var v = coerce(typeOfValue(cur), cl.value);
@@ -185,18 +197,20 @@ function showValue(v) {
   return String(v);
 }
 
-export function describeCondition(cond, defs) {
+export function describeCondition(cond, defs, classes) {
   if (!cond || !cond.clauses || cond.clauses.length === 0) return 'always';
   var parts = cond.clauses.map(function (cl) {
+    if (cl.kind === 'class') return (cl.cmp === '!=' ? 'not ' : '') + className(classes, cl.classId);
     return varName(defs, cl.varId) + ' ' + (CMP_TEXT[cl.cmp] || '=') + ' ' + showValue(cl.value);
   });
   return parts.join(cond.mode === 'any' ? ' or ' : ' and ');
 }
 
-export function describeEffects(effects, defs) {
+export function describeEffects(effects, defs, classes) {
   if (!effects || effects.length === 0) return '';
   return effects
     .map(function (fx) {
+      if (fx.op === 'become') return 'become ' + className(classes, fx.value);
       var name = varName(defs, fx.varId);
       if (fx.op === 'toggle') return 'toggle ' + name;
       if (fx.op === 'add') return name + ' +' + coerce('number', fx.value);
@@ -265,10 +279,165 @@ export function sceneAfter(node, current) {
 }
 
 // ---------------------------------------------------------------------------
+// Classes and sub-classes
+// ---------------------------------------------------------------------------
+
+/** Reserved variable keys holding the reader's class / sub-class id ('' or missing = none). */
+export var CLASS_KEY = '@class';
+export var SUBCLASS_KEY = '@subclass';
+
+function findClass(classes, id) {
+  if (!id) return null;
+  for (var i = 0; i < (classes || []).length; i++) if (classes[i] && classes[i].id === id) return classes[i];
+  return null;
+}
+
+/** "🔥 Mage" (or "(deleted class)"). */
+export function className(classes, id) {
+  var c = findClass(classes, id);
+  if (!c) return '(deleted class)';
+  return (c.icon ? c.icon + ' ' : '') + (String(c.name || '').trim() || '(unnamed class)');
+}
+
+/**
+ * The reader becomes class `classId`; returns new variables.
+ * - a class: @class = it, @subclass cleared, its effects run;
+ * - a sub-class while already in its parent: only the sub-class effects run
+ *   (a promotion never resets stats);
+ * - a sub-class otherwise: the parent's effects run first, then the sub-class's.
+ * Values from an old class are not undone. "become" inside class effects is ignored.
+ */
+export function becomeClass(classes, vars, classId) {
+  var c = findClass(classes, classId);
+  if (!c) return vars;
+  var out = Object.assign({}, vars);
+  var parent = c.parentId ? findClass(classes, c.parentId) : null;
+  if (parent) {
+    if (out[CLASS_KEY] !== parent.id) {
+      out[CLASS_KEY] = parent.id;
+      out[SUBCLASS_KEY] = '';
+      out = applyEffects(parent.effects, out);
+    }
+    out[SUBCLASS_KEY] = c.id;
+  } else {
+    out[CLASS_KEY] = c.id;
+    out[SUBCLASS_KEY] = '';
+  }
+  return applyEffects(c.effects, out);
+}
+
+/** The reader's class and sub-class right now: [class] or [class, sub-class] or []. */
+export function currentClasses(classes, vars) {
+  var out = [];
+  var c = findClass(classes, vars && vars[CLASS_KEY]);
+  if (c) out.push(c);
+  var sub = findClass(classes, vars && vars[SUBCLASS_KEY]);
+  if (c && sub && sub.parentId === c.id) out.push(sub);
+  return out;
+}
+
+/** Classes a Choose class card offers right now (see ClassPickData). */
+export function classOptions(index, state, node) {
+  var d = (node && node.data) || {};
+  var classes = index.classes || [];
+  var list;
+  if (d.mode === 'subclass') {
+    var cur = state.vars && state.vars[CLASS_KEY];
+    list = classes.filter(function (c) {
+      return !!cur && c.parentId === cur;
+    });
+  } else {
+    list = classes.filter(function (c) {
+      return !c.parentId || !findClass(classes, c.parentId);
+    });
+  }
+  var picked = d.options || [];
+  if (picked.length) {
+    list = list.filter(function (c) {
+      return picked.indexOf(c.id) !== -1;
+    });
+  }
+  return list;
+}
+
+// ---------------------------------------------------------------------------
+// Status panel (items / abilities / power) and the HUD
+// ---------------------------------------------------------------------------
+
+function groupKey(g) {
+  return String(g == null ? '' : g).trim().toLowerCase();
+}
+
+/** HUD groups showing after arriving at `node` (null = HUD off). Missing setting = keep. */
+export function hudAfter(node, current) {
+  var h = node && node.data && node.data.hud;
+  if (h && h.mode === 'hide') return null;
+  if (h && h.mode === 'show') return (h.groups || []).slice();
+  return current == null ? null : current;
+}
+
+/** Group names in use (variables shown to readers), in variable order. */
+export function statusGroupNames(defs) {
+  var seen = {};
+  var out = [];
+  (defs || []).forEach(function (d) {
+    if (!d || !d.show) return;
+    var name = String(d.show.group || '').trim() || 'Items';
+    var k = groupKey(name);
+    if (seen[k]) return;
+    seen[k] = true;
+    out.push(name);
+  });
+  return out;
+}
+
+/**
+ * What the reader sees: [{ name, rows: [{ id, label, icon, type, value, max }] }].
+ * `groups` = names to show in that order ([] / missing = every group, in variable
+ * order). Hidden: yes/no at "no", numbers at 0 (unless shown as a bar), empty text.
+ * A group with nothing to show comes back with no rows.
+ */
+export function statusView(defs, vars, groups) {
+  var wanted = (groups || []).map(groupKey).filter(Boolean);
+  var order = [];
+  var byKey = {};
+  vars = vars || {};
+  (defs || []).forEach(function (d) {
+    if (!d || !d.show) return;
+    var name = String(d.show.group || '').trim() || 'Items';
+    var key = groupKey(name);
+    if (wanted.length && wanted.indexOf(key) === -1) return;
+    if (!byKey[key]) {
+      byKey[key] = { name: name, rows: [] };
+      order.push(key);
+    }
+    var v = has(vars, d.id) ? vars[d.id] : coerce(d.type, d.initial);
+    var label = d.show.label && String(d.show.label).trim() ? String(d.show.label).trim() : String(d.name || '').replace(/_/g, ' ').trim();
+    var row = { id: d.id, label: label || '(unnamed)', icon: d.show.icon ? String(d.show.icon).trim() : '', type: d.type, value: v, max: null };
+    if (d.type === 'bool') {
+      if (v !== true) return;
+    } else if (d.type === 'number') {
+      var max = Number(d.show.max);
+      if (d.show.max != null && isFinite(max) && max > 0) row.max = max;
+      else if (Number(v) === 0) return;
+    } else if (v == null || String(v) === '') return;
+    byKey[key].rows.push(row);
+  });
+  if (wanted.length) {
+    order.sort(function (a, b) {
+      return wanted.indexOf(a) - wanted.indexOf(b);
+    });
+  }
+  return order.map(function (k) {
+    return byKey[k];
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Save points
 // ---------------------------------------------------------------------------
 
-var SAVE_KINDS = { chapter: 1, scene: 1, dialog: 1, decision: 1, loop: 1 };
+var SAVE_KINDS = { chapter: 1, scene: 1, dialog: 1, decision: 1, loop: 1, status: 1, classpick: 1 };
 
 /** Whether a card can be a save point (cards the reader stops on; a Chance only when it reveals). */
 export function canSavePoint(node) {
@@ -302,7 +471,7 @@ export function buildIndex(story) {
     arcs[a.id] = { id: a.id, name: a.name, nodes: a.nodes || [], edges: a.edges || [], map: map };
     order.push(a.id);
   });
-  return { arcs: arcs, order: order, variables: story.variables || [] };
+  return { arcs: arcs, order: order, variables: story.variables || [], classes: story.classes || [] };
 }
 
 function cloneProgress(p) {
@@ -334,6 +503,7 @@ export function land(index, arcId, rawId, base, rng, pick) {
   var prog = cloneProgress(base.progress || {});
   var vars = Object.assign({}, base.vars || {});
   var scene = base.scene == null ? null : base.scene;
+  var hud = base.hud == null ? null : base.hud;
   var save = base.save || null;
   var arcStart = base.arcStart || null;
   var entered = !!base.enter; // just arrived in an arc → the next stop is its start
@@ -352,6 +522,7 @@ export function land(index, arcId, rawId, base, rng, pick) {
       vars: vars,
       roll: roll || null,
       scene: scene,
+      hud: hud,
       save: save,
       arcStart: arcStart,
     };
@@ -369,8 +540,9 @@ export function land(index, arcId, rawId, base, rng, pick) {
     if (!node) return out(null);
     var d = node.data || {};
 
-    if (d.onEnter && d.onEnter.length) vars = applyEffects(d.onEnter, vars);
+    if (d.onEnter && d.onEnter.length) vars = applyEffects(d.onEnter, vars, index.classes);
     scene = sceneAfter(node, scene);
+    hud = hudAfter(node, hud);
 
     if (node.type === 'loop') {
       var top = cs[cs.length - 1];
@@ -424,7 +596,7 @@ export function land(index, arcId, rawId, base, rng, pick) {
 /** Fresh playthrough from the start of `startArcId` (or the first arc). */
 export function startPlay(index, startArcId, rng, pick) {
   var arcId = index.arcs[startArcId] ? startArcId : index.order[0];
-  var base = { callStack: [], progress: {}, vars: initialVars(index.variables), scene: null, enter: true };
+  var base = { callStack: [], progress: {}, vars: initialVars(index.variables), scene: null, hud: null, enter: true };
   var arc = index.arcs[arcId];
   if (!arc) {
     return {
@@ -435,6 +607,7 @@ export function startPlay(index, startArcId, rng, pick) {
       vars: base.vars,
       roll: null,
       scene: null,
+      hud: null,
       save: null,
       arcStart: null,
     };
@@ -445,14 +618,15 @@ export function startPlay(index, startArcId, rng, pick) {
 
 /**
  * Start playing at a specific card ("Play from here") with given variable values
- * and, optionally, the background that would be showing when the reader got there.
+ * and, optionally, the background and HUD that would be showing when the reader got there.
  */
-export function startAt(index, arcId, nodeId, vars, rng, pick, scene) {
+export function startAt(index, arcId, nodeId, vars, rng, pick, scene, hud) {
   var base = {
     callStack: [],
     progress: {},
     vars: Object.assign(initialVars(index.variables), vars || {}),
     scene: scene == null ? null : scene,
+    hud: hud == null ? null : hud.slice(),
     enter: true,
   };
   return land(index, arcId, nodeId, base, rng, pick);
@@ -472,6 +646,7 @@ function ended(state, vars) {
     vars: vars || state.vars,
     roll: null,
     scene: state.scene == null ? null : state.scene,
+    hud: state.hud == null ? null : state.hud,
     save: state.save || null,
     arcStart: state.arcStart || null,
   };
@@ -494,6 +669,7 @@ export function hasNext(index, state) {
 export function next(index, state, rng, pick) {
   var node = currentNode(index, state);
   if (!node || node.type === 'decision' || node.type === 'loop' || node.type === 'end') return state;
+  if (node.type === 'classpick' && classOptions(index, state, node).length) return state; // waits for a pick
   var t = nextNodeId(node.id, index.arcs[state.arcId].edges, nextHandle(node, state));
   return t ? land(index, state.arcId, t, state, rng, pick) : ended(state);
 }
@@ -506,7 +682,7 @@ export function choose(index, state, choiceId, rng, pick) {
   var choice = null;
   for (var i = 0; i < choices.length; i++) if (choices[i].id === choiceId) choice = choices[i];
   if (!choice || !evaluate(choice.condition, state.vars)) return state;
-  var vars = applyEffects(choice.effects, state.vars);
+  var vars = applyEffects(choice.effects, state.vars, index.classes);
   var t = nextNodeId(node.id, index.arcs[state.arcId].edges, choiceHandle(choiceId));
   var base = {
     arcId: state.arcId,
@@ -516,6 +692,7 @@ export function choose(index, state, choiceId, rng, pick) {
     vars: vars,
     roll: null,
     scene: state.scene,
+    hud: state.hud == null ? null : state.hud,
     save: state.save || null,
     arcStart: state.arcStart || null,
   };
@@ -537,6 +714,7 @@ export function enterItem(index, state, itemId, rng, pick) {
     vars: state.vars,
     roll: null,
     scene: state.scene,
+    hud: state.hud == null ? null : state.hud,
     save: state.save || null,
     arcStart: state.arcStart || null,
   };
@@ -570,4 +748,29 @@ export function checkpointStep(states, cp, field) {
   if (!cp) return -1;
   for (var i = 0; i < states.length; i++) if (states[i] && states[i][field] === cp) return i;
   return -1;
+}
+
+/** Pick a class on a Choose class card: the reader becomes it, then the story follows the card's wire. */
+export function pickClass(index, state, classId, rng, pick) {
+  var node = currentNode(index, state);
+  if (!node || node.type !== 'classpick') return state;
+  var offered = classOptions(index, state, node).some(function (c) {
+    return c.id === classId;
+  });
+  if (!offered) return state;
+  var vars = becomeClass(index.classes, state.vars, classId);
+  var t = nextNodeId(node.id, index.arcs[state.arcId].edges);
+  var base = {
+    arcId: state.arcId,
+    currentId: state.currentId,
+    callStack: state.callStack,
+    progress: state.progress,
+    vars: vars,
+    roll: null,
+    scene: state.scene,
+    hud: state.hud == null ? null : state.hud,
+    save: state.save || null,
+    arcStart: state.arcStart || null,
+  };
+  return t ? land(index, state.arcId, t, base, rng, pick) : ended(state, vars);
 }

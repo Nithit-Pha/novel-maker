@@ -21,7 +21,7 @@ import { getBackend, type ProjectsBackend, type ProjectSummary } from '../storag
 import { blankProject, migrateBrowserStory } from '../storage/session';
 import { confirmDialog, notify, promptDialog } from '../ui/dialogs';
 import Dropdown, { MenuItem } from '../ui/Dropdown';
-import { goProject } from '../ui/router';
+import { goHelp, goProject } from '../ui/router';
 import { useTheme } from '../ui/theme';
 
 /** Ask for a name and create an empty project. Returns its final name. */
@@ -196,6 +196,10 @@ export default function HomePage() {
           <div className="flex-1" />
           <button onClick={toggleTheme} className="nf-icon-btn" aria-label="Toggle light / dark theme" title="Light / dark">
             {theme === 'dark' ? <Moon size={17} /> : <Sun size={17} />}
+          </button>
+          <button onClick={() => goHelp()} className="nf-btn" title="How to use Novel Flow — every tool explained">
+            <BookOpen size={15} />
+            <span className="hidden sm:inline">How to use</span>
           </button>
           <button onClick={() => fileRef.current?.click()} className="nf-btn" title="Import a story file (.json) as a new project">
             <Upload size={15} />

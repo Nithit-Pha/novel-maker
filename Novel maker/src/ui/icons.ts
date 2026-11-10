@@ -1,4 +1,5 @@
 import {
+  Backpack,
   Clapperboard,
   Compass,
   Dices,
@@ -8,6 +9,7 @@ import {
   Play,
   Repeat,
   Split,
+  Swords,
   type LucideIcon,
 } from 'lucide-react';
 import type { NodeKind } from '../types';
@@ -22,6 +24,8 @@ export const NODE_ICONS: Record<NodeKind, LucideIcon> = {
   portal: Orbit,
   condition: Compass,
   chance: Dices,
+  status: Backpack,
+  classpick: Swords,
   end: Flag,
 };
 
@@ -34,5 +38,7 @@ export const NODE_LABELS: Record<NodeKind, string> = {
   portal: 'Go to Arc',
   condition: 'Condition',
   chance: 'Chance',
+  status: 'Status',
+  classpick: 'Choose class',
   end: 'Ending',
 };

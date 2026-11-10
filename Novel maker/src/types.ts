@@ -7,6 +7,8 @@ export type NodeKind =
   | 'portal'
   | 'condition'
   | 'chance'
+  | 'status'
+  | 'classpick'
   | 'end';
 
 // ---------------------------------------------------------------------------
@@ -16,6 +18,22 @@ export type NodeKind =
 export type VarType = 'bool' | 'number' | 'text';
 export type VarValue = boolean | number | string;
 
+/**
+ * How a variable appears to readers in the Status panel (Status card / HUD).
+ * yes/no → shown while "yes"; number → value (hidden at 0) or a bar when `max`
+ * is set; text → shown while not empty.
+ */
+export interface VarShow {
+  /** Heading it's listed under: "Items", "Abilities", "Power" or the writer's own. */
+  group: string;
+  /** Display name. Default: the variable name with "_" as spaces. */
+  label?: string;
+  /** Optional emoji shown before the name. */
+  icon?: string;
+  /** Numbers only: show as a bar "value / max". */
+  max?: number;
+}
+
 /** A project-level story variable. References use `id`, so renaming is safe. */
 export interface VariableDef {
   id: string;
@@ -23,9 +41,18 @@ export interface VariableDef {
   type: VarType;
   initial: VarValue;
   note?: string;
+  /** Shown to readers in the Status panel. Missing = writer-only. */
+  show?: VarShow;
 }
 
-export type EffectOp = 'set' | 'add' | 'sub' | 'toggle';
+/**
+ * The HUD (Status slot beside the text) from this card on.
+ * `show` with `groups: []` = every group. Missing on a card = keep what's showing.
+ */
+export type HudSetting = { mode: 'show'; groups: string[] } | { mode: 'hide' };
+
+/** `become` = the reader becomes class `value` (a class id); `varId` is unused. */
+export type EffectOp = 'set' | 'add' | 'sub' | 'toggle' | 'become';
 
 /** A change to a variable, e.g. `trust_mira add 1`. */
 export interface Effect {
@@ -37,12 +64,31 @@ export interface Effect {
 
 export type Cmp = '==' | '!=' | '>' | '>=' | '<' | '<=';
 
-/** One rule row, e.g. `trust_mira >= 5`. */
+/**
+ * One rule row, e.g. `trust_mira >= 5`.
+ * `kind: 'class'` = "Class is / is not <classId>" (cmp `==` / `!=`; varId and value unused).
+ * A parent class matches its sub-classes too.
+ */
 export interface Clause {
   id: string;
   varId: string;
   cmp: Cmp;
   value: VarValue;
+  kind?: 'var' | 'class';
+  classId?: string;
+}
+
+/** A class (Warrior, Mage…) or, with `parentId`, a sub-class (Knight). One level deep. */
+export interface ClassDef {
+  id: string;
+  name: string;
+  /** Optional emoji. */
+  icon?: string;
+  description?: string;
+  /** Set = this is a sub-class of that class. */
+  parentId?: string | null;
+  /** Run when the reader becomes this class (starting stats, items, abilities). */
+  effects: Effect[];
 }
 
 /** `all` = every rule must hold, `any` = at least one. No rules = always true. */
@@ -75,6 +121,8 @@ export interface CommonNodeData {
    * loop progress and background as they were. Only on cards the reader stops on.
    */
   savePoint?: boolean;
+  /** Status HUD from this card on: show (some / all groups) or hide. Missing = keep. */
+  hud?: HudSetting;
   [key: string]: unknown;
 }
 
@@ -165,6 +213,29 @@ export interface ChanceData extends CommonNodeData {
   show: 'silent' | 'reveal';
 }
 
+/** Shows the reader their items / abilities / power (variables marked "Show to reader"). */
+export interface StatusData extends CommonNodeData {
+  kind: 'status';
+  /** Heading, e.g. "Your inventory". Empty = "Your status". */
+  title: string;
+  /** Optional line under the heading. */
+  text?: string;
+  /** Groups to show, in this order. Empty = every group. */
+  groups: string[];
+}
+
+/** The reader picks a class (or, in `subclass` mode, a sub-class of their current class). */
+export interface ClassPickData extends CommonNodeData {
+  kind: 'classpick';
+  /** Heading, e.g. "Choose your path". */
+  title: string;
+  /** Optional line under the heading. */
+  prompt: string;
+  mode: 'class' | 'subclass';
+  /** Class ids to offer. Empty = all (classes, or sub-classes of the current class). */
+  options: string[];
+}
+
 /** Ending type from older saves (no longer edited or shown; kept so old files load). */
 export type EndingType = 'good' | 'bad' | 'neutral' | 'true' | 'custom';
 
@@ -194,4 +265,6 @@ export type NodeData =
   | PortalData
   | ConditionData
   | ChanceData
+  | StatusData
+  | ClassPickData
   | EndData;

@@ -39,6 +39,8 @@
   --n-portal: 94 95 150;
   --n-condition: 156 90 107;
   --n-chance: 134 105 42;
+  --n-status: 104 114 52;
+  --n-classpick: 140 58 74;
   --n-end: 110 103 93;
   --shadow-sm: 0 1px 2px rgb(var(--shade) / 0.06), 0 1px 1px rgb(var(--shade) / 0.04);
   --shadow-md: 0 1px 3px rgb(var(--shade) / 0.08), 0 8px 22px -10px rgb(var(--shade) / 0.22);
@@ -72,6 +74,8 @@
   --n-portal: 163 164 208;
   --n-condition: 212 157 170;
   --n-chance: 210 178 106;
+  --n-status: 178 188 118;
+  --n-classpick: 222 140 154;
   --n-end: 185 177 164;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.25);
   --shadow-md: 0 1px 3px rgb(0 0 0 / 0.3), 0 10px 26px -12px rgb(0 0 0 / 0.6);
@@ -88,6 +92,8 @@
 .nf-kind-portal { --node: var(--n-portal); }
 .nf-kind-condition { --node: var(--n-condition); }
 .nf-kind-chance { --node: var(--n-chance); }
+.nf-kind-status { --node: var(--n-status); }
+.nf-kind-classpick { --node: var(--n-classpick); }
 .nf-kind-end { --node: var(--n-end); }
 
 html,
@@ -451,4 +457,14 @@ select {
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Status HUD on phones: a small bar over the reading page that opens/closes. */
+.nf-hud-bar {
+  background: rgb(var(--surface) / 0.92);
+  border: 1px solid rgb(var(--border));
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }

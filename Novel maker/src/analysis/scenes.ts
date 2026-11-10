@@ -4,7 +4,7 @@
 import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../types';
 import type { Project } from '../project';
-import { NO_SCENE, sceneAfter } from '../engine';
+import { NO_SCENE, hudAfter, sceneAfter } from '../engine';
 
 /** How many cards (in every arc) set each scene. */
 export function sceneUsage(project: Pick<Project, 'arcs'>): Map<string, number> {
@@ -23,6 +23,23 @@ export function sceneUsage(project: Pick<Project, 'arcs'>): Map<string, number> 
  * the wires backwards). Used by "Play from here". null = none found.
  */
 export function sceneBefore(nodes: Node<NodeData>[], edges: Edge[], nodeId: string): string | null {
+  const n = nearestBefore(nodes, edges, nodeId, (d) => !!d.sceneId);
+  return n ? sceneAfter(n, null) : null;
+}
+
+/** The Status HUD showing when the reader arrives at `nodeId` (nearest card before it that sets one). */
+export function hudBefore(nodes: Node<NodeData>[], edges: Edge[], nodeId: string): string[] | null {
+  const n = nearestBefore(nodes, edges, nodeId, (d) => !!d.hud);
+  return n ? hudAfter(n, null) : null;
+}
+
+/** Nearest card leading to `nodeId` (walking wires backwards, breadth-first) that passes `test`. */
+function nearestBefore(
+  nodes: Node<NodeData>[],
+  edges: Edge[],
+  nodeId: string,
+  test: (d: NodeData) => boolean
+): Node<NodeData> | null {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const incoming = new Map<string, string[]>();
   for (const e of edges) {
@@ -39,7 +56,7 @@ export function sceneBefore(nodes: Node<NodeData>[], edges: Edge[], nodeId: stri
         if (seen.has(src)) continue;
         seen.add(src);
         const n = byId.get(src);
-        if (n?.data?.sceneId) return sceneAfter(n, null);
+        if (n?.data && test(n.data)) return n;
         nextFrontier.push(src);
       }
     frontier = nextFrontier;

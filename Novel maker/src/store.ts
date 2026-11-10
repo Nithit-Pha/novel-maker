@@ -10,7 +10,7 @@ import {
   type Node,
   type NodeChange,
 } from '@xyflow/react';
-import type { NodeKind, NodeData, VariableDef, VarType } from './types';
+import type { ClassDef, HudSetting, NodeKind, NodeData, VariableDef, VarType } from './types';
 import { type Arc, type Project, cloneWithNewIds, emptyArc, migrateProject, newId } from './project';
 import { branchHandle, choiceHandle, coerce, defaultValue, normHandle, outcomeHandle } from './engine';
 
@@ -56,6 +56,17 @@ export interface FlowState {
 
   /** Story variables (project-wide; not part of per-arc undo history). */
   variables: VariableDef[];
+  /** Classes and sub-classes (project-wide; not part of per-arc undo history). */
+  classes: ClassDef[];
+  /** Main character ids ("you"); one for now. */
+  mainCharacterIds: string[];
+  /** Make this character the main one (null = none). */
+  setMainCharacter: (id: string | null) => void;
+  /** New class (or sub-class of `parentId`); returns its id. */
+  addClass: (parentId?: string | null) => string;
+  updateClass: (id: string, patch: Partial<Omit<ClassDef, 'id'>>) => void;
+  /** Deletes the class and its sub-classes. */
+  deleteClass: (id: string) => void;
   addVariable: (type?: VarType) => string;
   updateVariable: (id: string, patch: Partial<Omit<VariableDef, 'id'>>) => void;
   deleteVariable: (id: string) => void;
@@ -104,6 +115,8 @@ export interface FlowState {
   togglePin: (id: string) => void;
   /** Turn the save-point flag on/off for these cards (cards that can't be save points are skipped) — one undo step. */
   setSavePointFor: (ids: string[], on: boolean) => void;
+  /** Status HUD from these cards on (undefined = keep) — one undo step. */
+  setHudFor: (ids: string[], hud: HudSetting | undefined) => void;
   setNodeTags: (id: string, tags: string[]) => void;
   selectOnly: (id: string) => void;
 
@@ -159,6 +172,8 @@ function defaultData(kind: NodeKind): NodeData {
         { id: newId(), label: 'Outcome B', weight: 1 },
       ],
     };
+  if (kind === 'status') return { kind, title: '', text: '', groups: [] };
+  if (kind === 'classpick') return { kind, title: '', prompt: '', mode: 'class', options: [] };
   if (kind === 'end') return { kind, title: '', description: '', character: '', text: '' };
   return { kind: 'dialog', character: '', text: '' };
 }
@@ -236,6 +251,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
       past: [],
       future: [],
       variables: project.variables ?? [],
+      classes: project.classes ?? [],
+      mainCharacterIds: project.mainCharacterIds ?? [],
     });
   };
 
@@ -251,6 +268,9 @@ export const useFlowStore = create<FlowState>((set, get) => {
     saveStatus: 'saved',
     saveError: null,
     variables: [],
+    classes: [],
+    mainCharacterIds: [],
+    setMainCharacter: (id) => set({ mainCharacterIds: id ? [id] : [] }),
     projectTitle: 'My Story',
     setProjectTitle: (projectTitle) => set({ projectTitle }),
 
@@ -274,6 +294,23 @@ export const useFlowStore = create<FlowState>((set, get) => {
           return next;
         }),
       });
+    },
+
+    addClass: (parentId = null) => {
+      const list = get().classes;
+      const siblings = list.filter((c) => (c.parentId ?? null) === (parentId ?? null)).length;
+      const c: ClassDef = { id: newId(), name: parentId ? `Sub-class ${siblings + 1}` : `Class ${siblings + 1}`, effects: [] };
+      if (parentId) c.parentId = parentId;
+      set({ classes: [...list, c] });
+      return c.id;
+    },
+
+    updateClass: (id, patch) => {
+      set({ classes: get().classes.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
+    },
+
+    deleteClass: (id) => {
+      set({ classes: get().classes.filter((c) => c.id !== id && c.parentId !== id) });
     },
 
     deleteVariable: (id) => {
@@ -455,6 +492,21 @@ export const useFlowStore = create<FlowState>((set, get) => {
       });
     },
 
+    setHudFor: (ids, hud) => {
+      const set_ = new Set(ids);
+      if (set_.size === 0) return;
+      pushHistory();
+      set({
+        nodes: get().nodes.map((n) => {
+          if (!set_.has(n.id)) return n;
+          const data = { ...n.data } as NodeData;
+          if (hud) data.hud = hud.mode === 'show' ? { mode: 'show', groups: [...hud.groups] } : { mode: 'hide' };
+          else delete data.hud;
+          return { ...n, data };
+        }),
+      });
+    },
+
     setNodeTags: (id, tags) => {
       pushHistory();
       set({
@@ -598,6 +650,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
         version: 3,
         meta: { title: get().projectTitle || 'My Story' },
         variables: get().variables,
+        classes: get().classes,
+        mainCharacterIds: get().mainCharacterIds,
         activeArcId,
         arcs: arcs.map((a) => ({
           id: a.id,
@@ -705,6 +759,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
         past: [],
         future: [],
         variables: [],
+        classes: [],
+        mainCharacterIds: [],
       });
     },
   };
@@ -719,6 +775,8 @@ export function snapshotProject(s: FlowState): Project {
     version: 3,
     meta: { title: s.projectTitle || 'My Story' },
     variables: s.variables,
+    classes: s.classes,
+    mainCharacterIds: s.mainCharacterIds,
     activeArcId: s.activeArcId,
     arcs: s.arcs.map((a) => {
       const g = a.id === s.activeArcId ? { nodes: s.nodes, edges: s.edges } : s.graphs[a.id];
@@ -797,7 +855,7 @@ export async function flushSave(): Promise<boolean> {
 }
 
 useFlowStore.subscribe((s, prev) => {
-  if (s.nodes === prev.nodes && s.edges === prev.edges && s.arcs === prev.arcs && s.variables === prev.variables)
+  if (s.nodes === prev.nodes && s.edges === prev.edges && s.arcs === prev.arcs && s.variables === prev.variables && s.classes === prev.classes && s.mainCharacterIds === prev.mainCharacterIds)
     return;
   if (cosmetic) {
     cosmetic = false;

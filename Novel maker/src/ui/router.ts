@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 
-export type Route = { page: 'home' } | { page: 'project'; name: string };
+export type Route = { page: 'home' } | { page: 'project'; name: string } | { page: 'help'; topic?: string };
 
-function parse(hash: string): Route {
+export function parse(hash: string): Route {
+  const h = hash.match(/^#\/help(?:\/([\w-]+))?\/?$/);
+  if (h) return h[1] ? { page: 'help', topic: h[1] } : { page: 'help' };
   const m = hash.match(/^#\/p\/(.+)$/);
   if (m) {
     try {
@@ -21,11 +23,15 @@ export function projectHash(name: string) {
 export function goHome() {
   window.location.hash = '#/';
 }
+/** The "How to use" guide (optionally at a topic). */
+export function goHelp(topic?: string) {
+  window.location.hash = topic ? `#/help/${topic}` : '#/help';
+}
 export function goProject(name: string) {
   window.location.hash = projectHash(name);
 }
 
-/** Tiny hash router: #/ = home, #/p/<name> = editor. */
+/** Tiny hash router: #/ = home, #/p/<name> = editor, #/help[/<topic>] = guide. */
 export function useRoute(): Route {
   const [route, setRoute] = useState<Route>(() => parse(window.location.hash));
   useEffect(() => {

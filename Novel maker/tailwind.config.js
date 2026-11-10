@@ -26,6 +26,8 @@ export default {
           portal: v('n-portal'),
           condition: v('n-condition'),
           chance: v('n-chance'),
+          status: v('n-status'),
+          classpick: v('n-classpick'),
           end: v('n-end'),
         },
         gray: {

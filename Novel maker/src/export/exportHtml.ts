@@ -5,7 +5,7 @@
 // file behaves exactly like Run mode in the editor. This file only renders.
 
 import type { Edge, Node } from '@xyflow/react';
-import type { NodeData, VariableDef } from '../types';
+import type { ClassDef, NodeData, VariableDef } from '../types';
 import type { Character } from '../library/libraryTypes';
 import CORE_SOURCE from '../runtime/core.js?raw';
 import { endingLabels } from '../analysis/explore';
@@ -31,6 +31,10 @@ interface BuildArgs {
   startArcId: string;
   characters: Character[];
   variables?: VariableDef[];
+  /** Classes and sub-classes (Library → Classes). */
+  classes?: ClassDef[];
+  /** The main character ("you") — shown at the top of the Status panel. */
+  mainCharacterIds?: string[];
   title?: string;
   /** Scenes used by the story. Unused ones can be left out to keep the file small. */
   scenes?: ExportScene[];
@@ -48,13 +52,15 @@ if (/<\/script/i.test(CORE_SOURCE)) {
   throw new Error('runtime/core.js must not contain a closing script tag');
 }
 
-export function buildStoryHtml({ arcs, startArcId, characters, variables, title, scenes }: BuildArgs): string {
+export function buildStoryHtml({ arcs, startArcId, characters, variables, classes, mainCharacterIds, title, scenes }: BuildArgs): string {
   const storyTitle = (title && title.trim()) || 'My Story';
   const characterList = characters.map((c) => ({ id: c.id, name: c.name, image: c.image ?? '' }));
   const storyData = {
     title: storyTitle,
     startArcId,
     variables: variables ?? [],
+    classes: classes ?? [],
+    mainCharacterIds: mainCharacterIds ?? [],
     arcs: arcs.map((a) => ({
       id: a.id,
       name: a.name,
@@ -92,14 +98,14 @@ export function buildStoryHtml({ arcs, startArcId, characters, variables, title,
   :root, :root[data-theme='light'] {
     --bg:#F4F0E8; --surface:#FFFCF6; --sunken:#F9F5EE; --surface-2:#EEE9DF; --border:#E0D8CB;
     --fg:#39352F; --soft:#4E4840; --muted:#6F675D; --faint:#9A9184; --accent:#A0674A; --on-accent:#FFFCF6; --warning:#9A7337;
-    --start:#56785A; --dialog:#4F6B8C; --decision:#A2612E; --scene:#7A5A85; --loop:#4A7A74; --chance:#86692A; --end:#6E675D;
+    --start:#56785A; --dialog:#4F6B8C; --decision:#A2612E; --scene:#7A5A85; --loop:#4A7A74; --chance:#86692A; --status:#687234; --classpick:#8C3A4A; --end:#6E675D;
     --shadow: 0 1px 3px rgba(107,85,55,.08), 0 8px 22px -10px rgba(107,85,55,.22);
     color-scheme: light;
   }
   :root[data-theme='dark'] {
     --bg:#24231F; --surface:#302D27; --sunken:#2A2823; --surface-2:#39352E; --border:#494238;
     --fg:#EAE2D5; --soft:#D6CDBF; --muted:#AAA092; --faint:#8A8174; --accent:#C18B68; --on-accent:#24231F; --warning:#D0AA6D;
-    --start:#93AE8F; --dialog:#8FA8C6; --decision:#D39B63; --scene:#B79DC3; --loop:#87B5AE; --chance:#D2B26A; --end:#B9B1A4;
+    --start:#93AE8F; --dialog:#8FA8C6; --decision:#D39B63; --scene:#B79DC3; --loop:#87B5AE; --chance:#D2B26A; --status:#B2BC76; --classpick:#DE8C9A; --end:#B9B1A4;
     --shadow: 0 1px 3px rgba(0,0,0,.3), 0 10px 26px -12px rgba(0,0,0,.6);
     color-scheme: dark;
   }
@@ -121,6 +127,22 @@ export function buildStoryHtml({ arcs, startArcId, characters, variables, title,
   .kicker.dialog { color: var(--dialog); } .kicker.decision { color: var(--decision); }
   .kicker.scene { color: var(--scene); } .kicker.loop { color: var(--loop); } .kicker.chapter { color: var(--start); }
   .kicker.chance { color: var(--chance); } .kicker.end { color: var(--end); justify-content:center; }
+  .kicker.status { color: var(--status); } .btn-next.status { background: var(--status); }
+  .kicker.classpick { color: var(--classpick); } .btn-next.classpick { background: var(--classpick); }
+  .classgrid { display: grid; gap: 10px; margin-top: 24px; } @media (min-width: 640px) { .classgrid { grid-template-columns: 1fr 1fr; } }
+  .classopt { text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; color: var(--fg); }
+  .classopt:hover { background: var(--surface-2); border-color: var(--classpick); }
+  .classopt .cn { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 500; }
+  .classopt .ci { font-size: 24px; line-height: 1; }
+  .classopt .cd { font-size: 14px; color: var(--soft); margin: 6px 0 0; line-height: 1.4; }
+  .classopt .cg { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  .wholine { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-family: 'Lora', Georgia, serif; color: var(--fg); }
+  .wholine img, .wholine .ph { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); flex-shrink: 0; }
+  .wholine .ph { display: flex; align-items: center; justify-content: center; background: var(--sunken); color: var(--muted); font-family: inherit; }
+  .spanel.big .wholine { font-size: 19px; } .spanel.big .wholine img, .spanel.big .wholine .ph { width: 44px; height: 44px; }
+  .classline { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .classline .k { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .2em; color: var(--classpick); }
+  .classline .v { color: var(--fg); font-weight: 500; }
   .avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); }
   .body { font-size: 26px; line-height: 1.55; margin: 0 0 40px; color: var(--fg); }
   .body.scene { font-style: italic; color: var(--soft); }
@@ -162,6 +184,36 @@ export function buildStoryHtml({ arcs, startArcId, characters, variables, title,
   .savecap { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
   .savecap b { color: var(--soft); font-weight: 600; }
   .savemark { color: var(--accent); font-weight: 600; }
+  /* Status panel (Status card + HUD) */
+  .spanel h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .2em; color: var(--status); margin: 0 0 8px; }
+  .spanel.small h3 { font-size: 10px; margin-bottom: 4px; }
+  .spanel section + section { margin-top: 20px; } .spanel.small section + section { margin-top: 12px; }
+  .spanel ul { list-style: none; margin: 0; padding: 0; }
+  .spanel li { padding: 6px 0; border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+  .spanel.small li { padding: 4px 0; } .spanel li:first-child { border-top: 0; }
+  .spanel.big { font-size: 16px; } .spanel.small { font-size: 13.5px; }
+  .srow { display: flex; align-items: center; gap: 8px; }
+  .srow .ic { width: 20px; text-align: center; flex-shrink: 0; }
+  .srow .lb { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
+  .srow .vl { color: var(--soft); font-variant-numeric: tabular-nums; }
+  .sbar { margin-top: 4px; height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+  .sbar > div { height: 100%; background: var(--status); border-radius: 99px; transition: width .5s; }
+  .none { color: var(--muted); font-style: italic; font-size: 14px; margin: 0; }
+  .statusbox { border: 1px solid var(--border); background: var(--surface); border-radius: 16px; padding: 16px 20px; margin: 24px 0 40px; }
+  .hud { position: absolute; top: 16px; right: 16px; width: 240px; max-height: calc(100% - 32px); overflow: auto; z-index: 2;
+    background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px 16px; box-shadow: var(--shadow); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .hud[hidden] { display: none; }
+  .hudhead { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; padding: 0; font-size: 13px; font-weight: 600; color: var(--fg); cursor: default; }
+  .hudhead .muted { font-weight: 400; }
+  .hudbody { margin-top: 10px; }
+  @media (min-width: 900px) { .stage.has-hud { padding-right: 290px; } }
+  @media (max-width: 899px) {
+    .hud { left: 12px; right: 12px; top: 12px; width: auto; padding: 8px 12px; }
+    .hudhead { cursor: pointer; min-height: 24px; }
+    .hud:not(.open) .hudbody { display: none; }
+    .stage.has-hud { padding-top: 64px; }
+  }
   .ghost { background: var(--surface); color: var(--soft); border: 1px solid var(--border); padding: 10px 18px; }
   .ghost:hover { background: var(--surface-2); color: var(--fg); }
   .overlay { position: fixed; inset: 0; background: rgba(40,30,20,.28); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
@@ -206,7 +258,7 @@ export function buildStoryHtml({ arcs, startArcId, characters, variables, title,
       <button class="navbtn outline" id="restart">Restart</button>
     </div>
   </div>
-  <div class="stage" id="stage"><div class="bg" id="bg" aria-hidden="true"><div class="layer"></div><div class="layer"></div><div class="veil"></div></div><div id="root" class="card"></div></div>
+  <div class="stage" id="stage"><div class="bg" id="bg" aria-hidden="true"><div class="layer"></div><div class="layer"></div><div class="veil"></div></div><aside class="hud" id="hud" hidden aria-label="Status"></aside><div id="root" class="card"></div></div>
   <div class="bottombar">
     <button class="navbtn" id="back">&larr; Back</button>
     <span id="hint"></span>
@@ -321,10 +373,13 @@ function recapRows() {
         var st = choiceState(c, s.vars);
         if (!st.visible) return;
         var status = c.id === a.choiceId ? 'taken' : (st.available ? 'skipped' : 'locked');
-        var why = status === 'locked' ? ((c.lockedText && c.lockedText.trim()) || ('Requires ' + describeCondition(c.condition, index.variables))) : '';
+        var why = status === 'locked' ? ((c.lockedText && c.lockedText.trim()) || ('Requires ' + describeCondition(c.condition, index.variables, index.classes))) : '';
         opts.push({ label: c.label || '(empty choice)', status: status, why: why });
       });
       rows.push({ title: d.prompt || 'Decision', opts: opts });
+    } else if (node.type === 'classpick' && a.type === 'class') {
+      rows.push({ title: (d.title || '').trim() || (d.mode === 'subclass' ? 'Sub-class' : 'Class'), opts: classOptions(index, s, node).map(function (c) {
+        return { label: className(index.classes, c.id), status: c.id === a.classId ? 'taken' : 'skipped' }; }) });
     } else if (node.type === 'loop' && a.type === 'item') {
       var done = s.progress[node.id] || [];
       rows.push({ title: d.title || 'Loop', opts: (d.items || []).filter(function (it) { return done.indexOf(it.id) === -1; })
@@ -367,6 +422,56 @@ function openOverlay(tab) {
   document.body.appendChild(overlayEl);
 }
 
+// ---- Status panel (items / abilities / power): Status cards + the HUD ----
+var hudOpen = false; // phones: the HUD bar starts collapsed
+function rowHtml(r) {
+  var ic = r.icon ? '<span class="ic" aria-hidden="true">' + esc(r.icon) + '</span>' : '';
+  if (r.max != null) {
+    var v = Number(r.value) || 0;
+    var pct = Math.max(0, Math.min(100, (v / r.max) * 100));
+    return '<li><div class="srow">' + ic + '<span class="lb">' + esc(r.label) + '</span><span class="vl">' + v + ' / ' + r.max + '</span></div>' +
+      '<div class="sbar" role="meter" aria-label="' + esc(r.label) + '" aria-valuemin="0" aria-valuemax="' + r.max + '" aria-valuenow="' + v + '"><div style="width:' + pct + '%"></div></div></li>';
+  }
+  return '<li><div class="srow">' + ic + '<span class="lb">' + esc(r.label) + '</span>' + (r.type === 'bool' ? '' : '<span class="vl">' + esc(r.value) + '</span>') + '</div></li>';
+}
+// "🔥 Mage · Pyromancer" — the reader's class, shown first in the Status panel.
+function classLineHtml() {
+  var cs = currentClasses(index.classes, state.vars);
+  if (!cs.length) return '';
+  var label = cs.map(function (c, i) { return i === 0 ? className(index.classes, c.id) : c.name; }).join(' · ');
+  return '<div class="classline"><span class="k">Class</span><span class="v">' + esc(label) + '</span></div>';
+}
+// The main character ("you"): portrait + name at the top of the Status panel.
+function whoHtml() {
+  var id = (S.mainCharacterIds || [])[0];
+  var c = id ? charById[id] : null;
+  if (!c) return '';
+  var name = (c.name || '').trim() || 'You';
+  return '<div class="wholine">' + (c.image ? '<img src="' + esc(c.image) + '" alt="" />' : '<span class="ph" aria-hidden="true">' + esc(name.charAt(0).toUpperCase()) + '</span>') +
+    '<span>' + esc(name) + '</span></div>';
+}
+function statusHtml(groups, hideEmpty, size) {
+  var list = hideEmpty ? groups.filter(function (g) { return g.rows.length; }) : groups;
+  var cl = whoHtml() + classLineHtml();
+  if (!list.length) return cl ? '<div class="spanel ' + size + '">' + cl + '</div>' : '<p class="none">Nothing yet.</p>';
+  return '<div class="spanel ' + size + '">' + cl + list.map(function (g) {
+    return '<section><h3>' + esc(g.name) + '</h3>' + (g.rows.length ? '<ul>' + g.rows.map(rowHtml).join('') + '</ul>' : '<p class="none">Nothing yet.</p>') + '</section>';
+  }).join('') + '</div>';
+}
+function renderHud(node) {
+  var hud = document.getElementById('hud');
+  // Not while a Status card is on screen: it already shows the same list.
+  if (!state.hud || (node && node.type === 'status')) { hud.hidden = true; stageEl.classList.remove('has-hud'); return; }
+  var groups = statusView(index.variables, state.vars, state.hud);
+  var count = groups.reduce(function (n, g) { return n + g.rows.length; }, 0);
+  hud.hidden = false;
+  stageEl.classList.add('has-hud');
+  hud.classList.toggle('open', hudOpen);
+  hud.innerHTML = '<button class="hudhead" aria-expanded="' + hudOpen + '"><span aria-hidden="true">🎒</span> Status <span class="muted">&middot; ' + count + '</span></button>' +
+    '<div class="hudbody">' + statusHtml(groups, true, 'small') + '</div>';
+  hud.querySelector('.hudhead').onclick = function () { hudOpen = !hudOpen; renderHud(node); };
+}
+
 function nextButton(cls, label) {
   var b = el('<button class="btn-next ' + cls + '">' + (hasNext(index, state) ? label : 'The End') + '</button>');
   b.onclick = goNext;
@@ -378,6 +483,7 @@ function render() {
   var arc = index.arcs[state.arcId];
   var node = currentNode(index, state);
   showScene(state.scene);
+  renderHud(node);
   stepsEl.textContent = (arc ? arc.name + ' · ' : '') + (node ? ('step ' + (history.length + 1)) : (history.length + ' steps'));
   backBtn.disabled = history.length === 0;
   hintEl.textContent = 'Press Space or → to continue';
@@ -416,7 +522,7 @@ function render() {
       if (!st.visible) return;
       var label = c.label ? esc(c.label) : '<span class="muted">(empty choice)</span>';
       if (!st.available) {
-        var why = (c.lockedText && c.lockedText.trim()) || ('Requires ' + describeCondition(c.condition, index.variables));
+        var why = (c.lockedText && c.lockedText.trim()) || ('Requires ' + describeCondition(c.condition, index.variables, index.classes));
         list.appendChild(el('<div class="choice locked"><span class="num">🔒</span><span>' + label + '</span><span class="why">' + esc(why) + '</span></div>'));
         return;
       }
@@ -450,6 +556,36 @@ function render() {
     card = el('<div style="text-align:center"><div class="kicker chance" style="justify-content:center">🎲 ' + esc(d.title || 'Chance') + '</div>' +
       '<h2 class="bigline">' + esc(o ? o.label : '(unnamed outcome)') + '</h2></div>');
     card.appendChild(nextButton('chance', 'Next →'));
+  } else if (node.type === 'status') {
+    var sg = statusView(index.variables, state.vars, d.groups);
+    card = el('<div><div class="kicker status"><span aria-hidden="true">🎒</span> Status</div>' +
+      '<h2 class="bigline" style="margin-bottom:12px">' + esc((d.title || '').trim() || 'Your status') + '</h2>' +
+      ((d.text || '').trim() ? '<p class="epilogue" style="font-style:normal;margin:0">' + esc(d.text) + '</p>' : '') +
+      '<div class="statusbox">' + statusHtml(sg, false, 'big') + '</div></div>');
+    card.appendChild(nextButton('status', 'Next →'));
+  } else if (node.type === 'classpick') {
+    var sub = d.mode === 'subclass';
+    var opts = classOptions(index, state, node);
+    card = el('<div><div class="kicker classpick">' + (sub ? 'Choose your path' : 'Choose your class') + '</div>' +
+      '<h2 class="bigline" style="margin-bottom:12px">' + esc((d.title || '').trim() || (sub ? 'Choose your path' : 'Who are you?')) + '</h2>' +
+      ((d.prompt || '').trim() ? '<p class="epilogue" style="font-style:normal;margin:0">' + esc(d.prompt) + '</p>' : '') + '</div>');
+    if (!opts.length) {
+      card.appendChild(el('<p class="muted" style="font-style:italic;margin:24px 0 40px">Nothing to choose here.</p>'));
+      card.appendChild(nextButton('classpick', 'Next →'));
+    } else {
+      var grid = el('<div class="classgrid"></div>');
+      opts.forEach(function (c) {
+        var gives = describeEffects(c.effects, index.variables, index.classes);
+        var b = el('<button class="classopt"><div class="cn">' + (c.icon ? '<span class="ci" aria-hidden="true">' + esc(c.icon) + '</span>' : '') +
+          '<span>' + esc(c.name || '(unnamed class)') + '</span></div>' +
+          ((c.description || '').trim() ? '<p class="cd">' + esc(c.description) + '</p>' : '') +
+          (gives ? '<p class="cg">' + esc(gives) + '</p>' : '') + '</button>');
+        b.onclick = function () { go(pickClass(index, state, c.id), { type: 'class', classId: c.id }); };
+        grid.appendChild(b);
+      });
+      card.appendChild(grid);
+      hintEl.textContent = 'Choose one to continue';
+    }
   } else if (node.type === 'end') {
     var title = (d.title || '').trim();
     var ctx = (d.description || '').trim();
@@ -479,7 +615,7 @@ document.addEventListener('keydown', function (e) {
   if (e.key === 'ArrowLeft' || e.key === 'Backspace') { if (history.length) { e.preventDefault(); goBack(); } }
   else if (e.key === 'ArrowRight' || e.key === ' ') {
     var node = currentNode(index, state);
-    if (node && (node.type === 'chapter' || node.type === 'scene' || node.type === 'dialog' || node.type === 'chance')) { e.preventDefault(); goNext(); }
+    if (node && (node.type === 'chapter' || node.type === 'scene' || node.type === 'dialog' || node.type === 'chance' || node.type === 'status' || node.type === 'classpick')) { e.preventDefault(); goNext(); }
   }
 });
 

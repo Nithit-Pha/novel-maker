@@ -36,6 +36,16 @@ export {
   loadSave,
   restartArc,
   checkpointStep,
+  hudAfter,
+  statusGroupNames,
+  statusView,
+  CLASS_KEY,
+  SUBCLASS_KEY,
+  className,
+  becomeClass,
+  currentClasses,
+  classOptions,
+  pickClass,
 } from './runtime/core.js';
 
-export type { CallFrame, PlayState, StoryIndex, Vars, Rng, ChancePick, RtNode, RtEdge } from './runtime/core.js';
+export type { StatusGroup, StatusRow, CallFrame, PlayState, StoryIndex, Vars, Rng, ChancePick, RtNode, RtEdge } from './runtime/core.js';

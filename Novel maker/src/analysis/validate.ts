@@ -12,6 +12,7 @@ import {
   normHandle,
   NO_SCENE,
   outcomeHandle,
+  statusGroupNames,
 } from '../engine';
 
 export type Severity = 'error' | 'warning' | 'note';
@@ -34,6 +35,8 @@ export function expectedOutputs(n: N): { handle: string; label: string }[] {
     case 'chapter':
     case 'scene':
     case 'dialog':
+    case 'status':
+    case 'classpick':
       return [{ handle: 'out', label: '' }];
     case 'decision':
       return d.choices.map((c, i) => ({ handle: choiceHandle(c.id), label: `Choice ${i + 1}${c.label ? ` “${c.label}”` : ''}` }));
@@ -56,8 +59,11 @@ export function expectedOutputs(n: N): { handle: string; label: string }[] {
 
 function varRefs(n: N): { varId: string; where: string }[] {
   const out: { varId: string; where: string }[] = [];
-  const fx = (effects: Effect[] | undefined, where: string) => effects?.forEach((e) => out.push({ varId: e.varId, where }));
-  const cond = (c: Condition | undefined, where: string) => c?.clauses.forEach((cl) => out.push({ varId: cl.varId, where }));
+  // Class rules and "become class" effects don't use a variable (checked separately).
+  const fx = (effects: Effect[] | undefined, where: string) =>
+    effects?.forEach((e) => e.op !== 'become' && out.push({ varId: e.varId, where }));
+  const cond = (c: Condition | undefined, where: string) =>
+    c?.clauses.forEach((cl) => cl.kind !== 'class' && out.push({ varId: cl.varId, where }));
   const d = n.data;
   fx(d.onEnter, 'on-enter changes');
   if (d.kind === 'decision') {
@@ -105,6 +111,19 @@ export function structuralReach(project: Project): { arcs: Set<string>; nodes: S
   return { arcs, nodes };
 }
 
+/** Class ids a card uses: class rules, "become class" effects, Choose class options. */
+function classRefs(n: N): string[] {
+  const out: string[] = [];
+  const fx = (effects: Effect[] | undefined) => effects?.forEach((e) => e.op === 'become' && out.push(String(e.value ?? '')));
+  const cond = (c: Condition | undefined) => c?.clauses.forEach((cl) => cl.kind === 'class' && out.push(cl.classId ?? ''));
+  const d = n.data;
+  fx(d.onEnter);
+  if (d.kind === 'decision') d.choices.forEach((c) => (fx(c.effects), cond(c.condition)));
+  else if (d.kind === 'condition') d.branches.forEach((b) => cond(b.condition));
+  else if (d.kind === 'classpick') out.push(...d.options);
+  return out;
+}
+
 /**
  * `sceneIds`: ids in the Scene Library. When given, cards that use a scene
  * missing from it are reported.
@@ -127,7 +146,19 @@ export function validateProject(project: Project, opts: { sceneIds?: Set<string>
     if (count > 1) push({ severity: 'warning', message: `${count} variables are called “${name}”. Rules can’t tell them apart by name.` });
   }
 
+  // Classes: names, and their effects' variables
+  const classes = project.classes ?? [];
+  const classIds = new Set(classes.map((c) => c.id));
+  for (const c of classes) {
+    if (!c.name.trim()) push({ severity: 'warning', message: 'A class has no name.' });
+    const bad = (c.effects ?? []).filter((e) => (e.op === 'become' ? false : !e.varId || !vars.has(e.varId)));
+    if (bad.length) push({ severity: 'error', message: `Class “${c.name || '(unnamed)'}” changes a deleted or unset variable.` });
+  }
+
   const reach = structuralReach(project);
+  // Status panel groups in use (variables shown to readers).
+  const groupKeys = new Set(statusGroupNames(project.variables).map((g) => g.trim().toLowerCase()));
+  const unknownGroups = (gs: string[] | undefined) => (gs ?? []).filter((g) => g.trim() && !groupKeys.has(g.trim().toLowerCase()));
 
   for (const arc of project.arcs) {
     const edges: Edge[] = arc.edges;
@@ -215,6 +246,32 @@ export function validateProject(project: Project, opts: { sceneIds?: Set<string>
       if (missing.length) {
         const where = [...new Set(missing.map((m) => m.where))].join(', ');
         push({ severity: 'error', ...at, message: `Uses a deleted or unset variable (${where}).` });
+      }
+
+      // Classes used by rules, "become" effects and Choose class cards
+      if (classRefs(n).some((id) => !id || !classIds.has(id)))
+        push({ severity: 'error', ...at, message: 'Uses a deleted or unset class.' });
+      if (d.kind === 'classpick') {
+        if (d.mode === 'subclass' ? !classes.some((c) => c.parentId) : !classes.some((c) => !c.parentId))
+          push({
+            severity: 'warning',
+            ...at,
+            message: d.mode === 'subclass' ? 'No class has sub-classes yet, so this card has nothing to offer.' : 'There are no classes yet — add some in Library → Classes.',
+          });
+      }
+
+      // Status card / Status slot
+      if (d.kind === 'status' && groupKeys.size === 0)
+        push({ severity: 'warning', ...at, message: 'No variable is shown to readers yet, so this Status card is empty — turn on “Show to reader” in Library → Variables.' });
+      const badStatus = d.kind === 'status' ? unknownGroups(d.groups) : [];
+      if (badStatus.length && groupKeys.size)
+        push({ severity: 'warning', ...at, message: `This Status card lists a group no variable uses: ${badStatus.join(', ')}.` });
+      if (d.hud?.mode === 'show') {
+        if (groupKeys.size === 0) push({ severity: 'warning', ...at, message: 'Shows the Status slot, but no variable is shown to readers yet.' });
+        else {
+          const bad = unknownGroups(d.hud.groups);
+          if (bad.length) push({ severity: 'warning', ...at, message: `The Status slot names a group no variable uses: ${bad.join(', ')}.` });
+        }
       }
 
       // Scene Library

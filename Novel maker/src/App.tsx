@@ -4,7 +4,7 @@ import { useStoryAnalysis } from './analysis/useAnalysis';
 import type { Route } from './analysis/explore';
 import { VarValueInput } from './logic/fields';
 import { initialVars, type Vars } from './engine';
-import { sceneBefore } from './analysis/scenes';
+import { hudBefore, sceneBefore } from './analysis/scenes';
 import NfEdge from './canvas/NfEdge';
 import DropMenu from './canvas/DropMenu';
 import { wireLabel } from './canvas/wireLabels';
@@ -33,6 +33,8 @@ import LoopNode from './nodes/LoopNode';
 import PortalNode from './nodes/PortalNode';
 import ConditionNode from './nodes/ConditionNode';
 import ChanceNode from './nodes/ChanceNode';
+import StatusNode from './nodes/StatusNode';
+import ClassPickNode from './nodes/ClassPickNode';
 import EndNode from './nodes/EndNode';
 import Toolbar from './Toolbar';
 import ArcTabs from './ArcTabs';
@@ -46,7 +48,8 @@ import { DialogHost, notify } from './ui/dialogs';
 import { EmptyCanvas, HelpSheet, LeftRail, ZoomControls } from './ui/CanvasChrome';
 import { useView } from './ui/viewPrefs';
 import { useUi } from './ui/uiStore';
-import { goHome, goProject, useRoute } from './ui/router';
+import { goHelp, goHome, goProject, useRoute } from './ui/router';
+import HelpPage from './help/HelpPage';
 import { closeProject, openProject, useSession } from './storage/session';
 
 /** Every wire uses NfEdge (curve + optional choice label); it replaces React Flow's default. */
@@ -61,6 +64,8 @@ const nodeTypes: NodeTypes = {
   portal: PortalNode,
   condition: ConditionNode,
   chance: ChanceNode,
+  status: StatusNode,
+  classpick: ClassPickNode,
   end: EndNode,
 };
 
@@ -74,6 +79,8 @@ const KIND_TOKEN: Record<string, string> = {
   portal: 'n-portal',
   condition: 'n-condition',
   chance: 'n-chance',
+  status: 'n-status',
+  classpick: 'n-classpick',
   end: 'n-end',
 };
 
@@ -96,10 +103,10 @@ function FlowCanvas() {
 
   const [play, setPlay] = useState<{
     project: Project;
-    start?: { arcId: string; nodeId: string; vars: Vars; scene?: string | null };
+    start?: { arcId: string; nodeId: string; vars: Vars; scene?: string | null; hud?: string[] | null };
     route?: Route;
   } | null>(null);
-  const [startFrom, setStartFrom] = useState<{ arcId: string; nodeId: string; vars: Vars; scene?: string | null } | null>(null);
+  const [startFrom, setStartFrom] = useState<{ arcId: string; nodeId: string; vars: Vars; scene?: string | null; hud?: string[] | null } | null>(null);
   const checkOpen = useUi((s) => s.checkOpen);
   const focus = useUi((s) => s.focus);
   const playFrom = useUi((s) => s.playFrom);
@@ -137,8 +144,10 @@ function FlowCanvas() {
     const vars = initialVars(st.variables);
     // Start with the background the reader would see arriving here.
     const scene = sceneBefore(st.nodes, st.edges, playFrom.nodeId);
-    if (st.variables.length === 0) setPlay({ project: getProject(), start: { ...playFrom, vars, scene } });
-    else setStartFrom({ ...playFrom, vars, scene });
+    // …and the Status HUD the cards before it switched on.
+    const hud = hudBefore(st.nodes, st.edges, playFrom.nodeId);
+    if (st.variables.length === 0) setPlay({ project: getProject(), start: { ...playFrom, vars, scene, hud } });
+    else setStartFrom({ ...playFrom, vars, scene, hud });
   }, [playFrom, getProject]);
 
   // "Play this route" from the Routes tab.
@@ -151,6 +160,8 @@ function FlowCanvas() {
   const [savesOpen, setSavesOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  /** Topic of the How to use guide shown over the editor (null = closed). */
+  const [guide, setGuide] = useState<string | null>(null);
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const addNodeConnected = useFlowStore((s) => s.addNodeConnected);
   /** A wire dropped on empty canvas: where, and which handle it came from. */
@@ -254,6 +265,7 @@ function FlowCanvas() {
         onHome={() => void leave()}
         onNewProject={() => void newProject()}
         onShowHelp={() => setHelpOpen(true)}
+        onShowGuide={() => setGuide('start')}
       />
       <ArcTabs />
       <div className={`flex-1 relative nf-paper ${hot ? 'nf-has-hot' : ''}`}>
@@ -297,7 +309,7 @@ function FlowCanvas() {
             />
           )}
         </ReactFlow>
-        <LeftRail onHome={() => void leave()} onHelp={() => setHelpOpen(true)} />
+        <LeftRail onHome={() => void leave()} onHelp={() => setGuide('start')} />
         {!locked && <ToolSwitch />}
         <SelectionBar />
         {nodes.length === 0 && <EmptyCanvas onAdd={addAtCenter} />}
@@ -315,7 +327,16 @@ function FlowCanvas() {
         {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} />}
       </div>
       {savesOpen && <SavesPanel onClose={() => setSavesOpen(false)} />}
-      {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
+      {helpOpen && (
+        <HelpSheet
+          onClose={() => setHelpOpen(false)}
+          onOpenGuide={() => {
+            setHelpOpen(false);
+            setGuide('start');
+          }}
+        />
+      )}
+      {guide && <HelpPage overlay topic={guide} onTopic={setGuide} onClose={() => setGuide(null)} />}
       {startFrom && (
         <StartFromDialog
           variables={variables}
@@ -423,7 +444,13 @@ export default function App() {
   const route = useRoute();
   return (
     <div className="h-screen w-screen overflow-hidden bg-bg text-fg">
-      {route.page === 'project' ? <ProjectScreen key={route.name} name={route.name} /> : <HomePage />}
+      {route.page === 'project' ? (
+        <ProjectScreen key={route.name} name={route.name} />
+      ) : route.page === 'help' ? (
+        <HelpPage topic={route.topic} onTopic={goHelp} onClose={goHome} />
+      ) : (
+        <HomePage />
+      )}
       <DialogHost />
     </div>
   );

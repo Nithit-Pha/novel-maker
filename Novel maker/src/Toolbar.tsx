@@ -53,6 +53,8 @@ interface Props {
   onHome: () => void;
   onNewProject: () => void;
   onShowHelp: () => void;
+  /** Opens the full How to use guide over the editor. */
+  onShowGuide: () => void;
 }
 
 const QUICK: { kind: NodeKind; label: string }[] = [
@@ -61,7 +63,7 @@ const QUICK: { kind: NodeKind; label: string }[] = [
   { kind: 'decision', label: 'Decision' },
   { kind: 'chapter', label: 'Start' },
 ];
-const MORE: NodeKind[] = ['loop', 'portal', 'condition', 'chance', 'end'];
+const MORE: NodeKind[] = ['loop', 'portal', 'condition', 'chance', 'status', 'classpick', 'end'];
 
 function slug(s: string) {
   return s.trim().replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '-').toLowerCase() || 'story';
@@ -87,6 +89,7 @@ export default function Toolbar({
   onHome,
   onNewProject,
   onShowHelp,
+  onShowGuide,
 }: Props) {
   const addNode = useFlowStore((s) => s.addNode);
   const exportJSON = useFlowStore((s) => s.exportJSON);
@@ -219,6 +222,8 @@ export default function Toolbar({
       startArcId: project.activeArcId,
       characters: useCharacterStore.getState().characters,
       variables: project.variables,
+      classes: project.classes,
+      mainCharacterIds: project.mainCharacterIds,
       title: project.meta.title,
       scenes,
     });
@@ -481,7 +486,7 @@ export default function Toolbar({
               <MenuItem icon={<Wand2 size={15} />} label="Tidy (auto-layout)" onClick={run(handleTidy)} />
               <MenuItem icon={<FolderOutput size={15} />} label="Save a copy to another folder…" onClick={run(onOpenSaves)} />
               <MenuItem icon={<Keyboard size={15} />} label="Keyboard shortcuts" hint="?" onClick={run(onShowHelp)} />
-              <MenuItem icon={<BookMarked size={15} />} label="Help & tips" onClick={run(onShowHelp)} />
+              <MenuItem icon={<BookMarked size={15} />} label="How to use (guide)" onClick={run(onShowGuide)} />
               <div className="nf-menu-sep" />
               <MenuItem icon={<Eraser size={15} />} label="Clear canvas…" danger onClick={run(() => void handleClear())} />
             </>

@@ -2,9 +2,9 @@ import { useEffect, useRef } from 'react';
 import type { NodeKind } from '../types';
 import { NODE_ICONS, NODE_LABELS } from '../ui/icons';
 
-const AFTER: NodeKind[] = ['dialog', 'scene', 'decision', 'chapter', 'condition', 'chance', 'loop', 'portal', 'end'];
+const AFTER: NodeKind[] = ['dialog', 'scene', 'decision', 'chapter', 'condition', 'chance', 'status', 'classpick', 'loop', 'portal', 'end'];
 /** Cards that can lead INTO another card (they have a plain "out" output). */
-const BEFORE: NodeKind[] = ['dialog', 'scene', 'chapter'];
+const BEFORE: NodeKind[] = ['dialog', 'scene', 'chapter', 'status', 'classpick'];
 
 /** Menu shown where a wire was dropped on empty canvas: pick the card to create. */
 export default function DropMenu({

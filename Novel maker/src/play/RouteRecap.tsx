@@ -2,9 +2,9 @@
 // "Endings found" (gallery). Pure views over the player's history.
 
 import { Check, Lock, RotateCcw, X } from 'lucide-react';
-import type { ChanceData, Choice, DecisionData, LoopData, NodeKind } from '../types';
+import type { ChanceData, Choice, ClassPickData, DecisionData, LoopData, NodeKind } from '../types';
 import type { Project } from '../project';
-import { choiceState, currentNode, describeCondition, type PlayState, type StoryIndex } from '../engine';
+import { choiceState, classOptions, className, currentNode, describeCondition, type PlayState, type StoryIndex } from '../engine';
 import type { RouteAction } from '../analysis/explore';
 import { endingLabels } from '../analysis/explore';
 import { NODE_ICONS } from '../ui/icons';
@@ -42,10 +42,23 @@ export function buildRecap(
             {
               label: c.label || '(empty choice)',
               status,
-              reason: status === 'locked' ? c.lockedText?.trim() || `Requires ${describeCondition(c.condition, project.variables)}` : undefined,
+              reason:
+                status === 'locked'
+                  ? c.lockedText?.trim() || `Requires ${describeCondition(c.condition, project.variables, project.classes)}`
+                  : undefined,
             },
           ];
         }),
+      });
+    } else if (node.type === 'classpick' && a.type === 'class') {
+      const d = node.data as ClassPickData;
+      rows.push({
+        kind: 'classpick',
+        title: d.title?.trim() || (d.mode === 'subclass' ? 'Sub-class' : 'Class'),
+        options: classOptions(index, s, node).map((c) => ({
+          label: className(project.classes, c.id),
+          status: (c.id === a.classId ? 'taken' : 'skipped') as OptionStatus,
+        })),
       });
     } else if (node.type === 'loop' && a.type === 'item') {
       const d = node.data as LoopData;

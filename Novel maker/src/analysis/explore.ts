@@ -10,12 +10,16 @@ import {
   buildIndex,
   choiceState,
   choose,
+  classOptions,
+  className,
+  currentClasses,
   currentNode,
   enterItem,
   isWired,
   itemHandle,
   next,
   outcomeOdds,
+  pickClass,
   startPlay,
   type ChancePick,
   type PlayState,
@@ -27,7 +31,11 @@ export const STATE_LIMIT = 20000;
 const RUNS_PER_ACTION = 512;
 const COUNT_CAP = 1e9;
 
-export type RouteAction = { type: 'next' } | { type: 'choose'; choiceId: string } | { type: 'item'; itemId: string };
+export type RouteAction =
+  | { type: 'next' }
+  | { type: 'choose'; choiceId: string }
+  | { type: 'item'; itemId: string }
+  | { type: 'class'; classId: string };
 
 export interface ChanceRoll {
   nodeId: string;
@@ -57,6 +65,8 @@ export interface EndingResult {
   /** Number of distinct routes (capped). */
   routes: number;
   shortest?: Route;
+  /** Classes that reach this ending ("🔥 Mage · Pyromancer", "No class"), when the story has classes. */
+  classes?: string[];
 }
 
 export interface ExploreResult {
@@ -178,6 +188,13 @@ export function exploreRoutes(project: Project, limit = STATE_LIMIT): ExploreRes
   const decisionsSeen = new Set<string>(); // nodeId
   const available = new Set<string>(); // nodeId|choiceId
   const firstReach = new Map<string, string>(); // end nodeId → state key (BFS = shortest)
+  // Which classes reach each ending (only when the story has classes).
+  const hasClasses = (project.classes ?? []).length > 0;
+  const endClasses = new Map<string, Set<string>>();
+  const classLabel = (s: PlayState) => {
+    const cs = currentClasses(project.classes, s.vars);
+    return cs.length ? cs.map((c, i) => (i === 0 ? className(project.classes, c.id) : c.name)).join(' · ') : 'No class';
+  };
 
   const isTerminal = (s: PlayState) => {
     const n = currentNode(index, s);
@@ -195,6 +212,11 @@ export function exploreRoutes(project: Project, limit = STATE_LIMIT): ExploreRes
     graph.set(k, { state, parent, via, initialRolls, edges: [], terminal });
     if (!terminal) queue.push(k);
     else if (state.currentId && !firstReach.has(state.currentId)) firstReach.set(state.currentId, k);
+    if (terminal && hasClasses && state.currentId) {
+      const set = endClasses.get(state.currentId) ?? new Set<string>();
+      set.add(classLabel(state));
+      endClasses.set(state.currentId, set);
+    }
     return k;
   };
 
@@ -218,6 +240,8 @@ export function exploreRoutes(project: Project, limit = STATE_LIMIT): ExploreRes
         available.add(`${node.id}|${c.id}`);
         actions.push({ type: 'choose', choiceId: c.id });
       }
+    } else if (node.type === 'classpick' && classOptions(index, s, node).length) {
+      for (const c of classOptions(index, s, node)) actions.push({ type: 'class', classId: c.id });
     } else if (node.type === 'loop') {
       const done = s.progress[node.id] ?? [];
       for (const it of node.data.items ?? []) {
@@ -233,6 +257,8 @@ export function exploreRoutes(project: Project, limit = STATE_LIMIT): ExploreRes
           ? next(index, s, undefined, pick)
           : action.type === 'choose'
           ? choose(index, s, action.choiceId, undefined, pick)
+          : action.type === 'class'
+          ? pickClass(index, s, action.classId, undefined, pick)
           : enterItem(index, s, action.itemId, undefined, pick);
       for (const r of allOutcomes(run)) {
         if (r.overflow) truncated = true;
@@ -304,6 +330,7 @@ export function exploreRoutes(project: Project, limit = STATE_LIMIT): ExploreRes
       reachable: !!k,
       routes: total.get(nodeId) ?? 0,
       shortest: k ? routeTo(k) : undefined,
+      classes: hasClasses ? [...(endClasses.get(nodeId) ?? [])].sort() : undefined,
     };
   });
 
@@ -344,7 +371,13 @@ export function replayRoute(project: Project, route: Route): PlayState[] {
     const s = states[states.length - 1];
     const a = step.action;
     const ns =
-      a.type === 'next' ? next(index, s, undefined, pick) : a.type === 'choose' ? choose(index, s, a.choiceId, undefined, pick) : enterItem(index, s, a.itemId, undefined, pick);
+      a.type === 'next'
+        ? next(index, s, undefined, pick)
+        : a.type === 'choose'
+        ? choose(index, s, a.choiceId, undefined, pick)
+        : a.type === 'class'
+        ? pickClass(index, s, a.classId, undefined, pick)
+        : enterItem(index, s, a.itemId, undefined, pick);
     states.push(ns);
   }
   return states;

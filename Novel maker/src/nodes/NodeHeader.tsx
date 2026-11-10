@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { AlertCircle, AlertTriangle, Bookmark, Image as ImageIcon, ImageOff, Pin, Play, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Backpack, Bookmark, EyeOff, Image as ImageIcon, ImageOff, Pin, Play, X } from 'lucide-react';
+import HudPicker, { describeHud } from '../logic/HudPicker';
+import type { HudSetting } from '../types';
 import { canSavePoint } from '../runtime/core.js';
 import { useFlowStore } from '../store';
 import type { NodeKind } from '../types';
@@ -30,6 +32,10 @@ export default function NodeHeader({ id, kind, label, pinned }: Props) {
   const canSave = useFlowStore((s) => canSavePoint(s.nodes.find((n) => n.id === id)));
   const savePoint = useFlowStore((s) => !!s.nodes.find((n) => n.id === id)?.data.savePoint) && canSave;
   const [picker, setPicker] = useState<HTMLElement | null>(null);
+  const [hudPicker, setHudPicker] = useState<HTMLElement | null>(null);
+  // A string (not an object) so the selector result is stable between renders.
+  const hudJson = useFlowStore((s) => JSON.stringify(s.nodes.find((n) => n.id === id)?.data.hud ?? null));
+  const hud = (JSON.parse(hudJson) as HudSetting | null) ?? undefined;
   const hasScene = !!sceneId && sceneId !== NO_SCENE;
   const deleteNode = useFlowStore((s) => s.deleteNode);
   // A string (not an array) so the selector result is stable between renders.
@@ -71,6 +77,16 @@ export default function NodeHeader({ id, kind, label, pinned }: Props) {
           <ImageIcon size={13} />
         </button>
       )}
+      <button
+        onClick={(e) => setHudPicker(hudPicker ? null : e.currentTarget)}
+        className={`nf-icon-btn !w-6 !h-6 ${hud ? '!text-accent' : 'opacity-60 hover:opacity-100'}`}
+        title={hud ? `Status slot from here: ${describeHud(hud)} — change` : 'Status slot (items, abilities, power) from this card on'}
+        aria-label="Status slot"
+        aria-haspopup="dialog"
+        aria-expanded={!!hudPicker}
+      >
+        <Backpack size={13} />
+      </button>
       {kind !== 'end' && (
         <button
           onClick={() => useUi.getState().requestPlayFrom({ arcId: useFlowStore.getState().activeArcId, nodeId: id })}
@@ -117,7 +133,25 @@ export default function NodeHeader({ id, kind, label, pinned }: Props) {
         <Bookmark size={11} fill="currentColor" /> Save point
       </div>
     )}
+    {hud && (
+      <button
+        onClick={(e) => setHudPicker(hudPicker ? null : e.currentTarget)}
+        className="w-full flex items-center gap-1.5 px-3 h-6 text-[11px] font-medium text-accent-status bg-accent-status/10 border-b border-border truncate"
+        title="Status slot from this card on — click to change"
+      >
+        {hud.mode === 'hide' ? <EyeOff size={11} /> : <Backpack size={11} />}
+        <span className="truncate">{hud.mode === 'hide' ? 'Status slot hidden from here' : `Status slot: ${describeHud(hud)}`}</span>
+      </button>
+    )}
     {kind !== 'scene' && sceneId && <SceneBanner sceneId={sceneId} onOpen={(el) => setPicker(picker ? null : el)} />}
+    {hudPicker && (
+      <HudPicker
+        anchor={hudPicker}
+        value={hud}
+        onPick={(v) => useFlowStore.getState().setHudFor([id], v)}
+        onClose={() => setHudPicker(null)}
+      />
+    )}
     {picker && (
       <ScenePicker
         anchor={picker}

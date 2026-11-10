@@ -19,6 +19,7 @@ export default function DecisionNode({ id, data, selected }: NodeProps<DecisionN
   const updateNodeData = useFlowStore((s) => s.updateNodeData);
   const removeChoice = useFlowStore((s) => s.removeChoice);
   const variables = useFlowStore((s) => s.variables);
+  const classes = useFlowStore((s) => s.classes);
   const [openId, setOpenId] = useState<string | null>(null);
   const hot = useUi((s) => (s.hot?.nodeId === id ? s.hot.handle : null));
 
@@ -74,8 +75,8 @@ export default function DecisionNode({ id, data, selected }: NodeProps<DecisionN
                       onClick={() => setOpenId(open ? null : choice.id)}
                       title={
                         [
-                          nRules ? `Available if ${describeCondition(choice.condition, variables)}` : '',
-                          nFx ? `When chosen: ${describeEffects(choice.effects, variables)}` : '',
+                          nRules ? `Available if ${describeCondition(choice.condition, variables, classes)}` : '',
+                          nFx ? `When chosen: ${describeEffects(choice.effects, variables, classes)}` : '',
                         ]
                           .filter(Boolean)
                           .join('\n') || 'Effects & condition for this choice'
@@ -147,7 +148,7 @@ export default function DecisionNode({ id, data, selected }: NodeProps<DecisionN
                               value={choice.lockedText ?? ''}
                               onChange={(e) => updateChoice(choice.id, { lockedText: e.target.value })}
                               onMouseDown={stop}
-                              placeholder={`Reason shown: Requires ${describeCondition(choice.condition, variables)}`}
+                              placeholder={`Reason shown: Requires ${describeCondition(choice.condition, variables, classes)}`}
                               className={`${fieldCls} w-full`}
                             />
                           )}

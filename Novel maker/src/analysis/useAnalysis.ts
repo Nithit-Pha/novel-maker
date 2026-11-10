@@ -43,6 +43,7 @@ export function useStoryAnalysis() {
   const arcs = useFlowStore((s) => s.arcs);
   const graphs = useFlowStore((s) => s.graphs);
   const variables = useFlowStore((s) => s.variables);
+  const classes = useFlowStore((s) => s.classes);
   const checkOpen = useUi((s) => s.checkOpen);
   const sceneKey = useSceneStore((s) => s.scenes.map((x) => x.id).join(','));
   const structural = useRef<Issue[]>([]);
@@ -51,6 +52,7 @@ export function useStoryAnalysis() {
   const signature = JSON.stringify([
     arcs,
     variables,
+    classes,
     nodes.map((n) => [n.id, n.type, n.data, Math.round(n.position.x / 50)]),
     edges.map((e) => [e.source, e.sourceHandle, e.target]),
   ]);
